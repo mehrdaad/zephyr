@@ -47,28 +47,31 @@ struct gpio_xlnx_axi_data {
 	uint32_t tri;
 };
 
-static inline uint32_t gpio_xlnx_axi_read_data(struct device *dev)
+static inline uint32_t gpio_xlnx_axi_read_data(const struct device *dev)
 {
 	const struct gpio_xlnx_axi_config *config = dev->config;
 
 	return sys_read32(config->base + GPIO_DATA_OFFSET);
 }
 
-static inline void gpio_xlnx_axi_write_data(struct device *dev, uint32_t val)
+static inline void gpio_xlnx_axi_write_data(const struct device *dev,
+					    uint32_t val)
 {
 	const struct gpio_xlnx_axi_config *config = dev->config;
 
 	sys_write32(val, config->base + GPIO_DATA_OFFSET);
 }
 
-static inline void gpio_xlnx_axi_write_tri(struct device *dev, uint32_t val)
+static inline void gpio_xlnx_axi_write_tri(const struct device *dev,
+					   uint32_t val)
 {
 	const struct gpio_xlnx_axi_config *config = dev->config;
 
 	sys_write32(val, config->base + GPIO_TRI_OFFSET);
 }
 
-static int gpio_xlnx_axi_pin_configure(struct device *dev, gpio_pin_t pin,
+static int gpio_xlnx_axi_pin_configure(const struct device *dev,
+				       gpio_pin_t pin,
 				       gpio_flags_t flags)
 {
 	const struct gpio_xlnx_axi_config *config = dev->config;
@@ -125,14 +128,14 @@ static int gpio_xlnx_axi_pin_configure(struct device *dev, gpio_pin_t pin,
 	return 0;
 }
 
-static int gpio_xlnx_axi_port_get_raw(struct device *dev,
+static int gpio_xlnx_axi_port_get_raw(const struct device *dev,
 				      gpio_port_value_t *value)
 {
 	*value = gpio_xlnx_axi_read_data(dev);
 	return 0;
 }
 
-static int gpio_xlnx_axi_port_set_masked_raw(struct device *dev,
+static int gpio_xlnx_axi_port_set_masked_raw(const struct device *dev,
 					     gpio_port_pins_t mask,
 					     gpio_port_value_t value)
 {
@@ -147,7 +150,7 @@ static int gpio_xlnx_axi_port_set_masked_raw(struct device *dev,
 	return 0;
 }
 
-static int gpio_xlnx_axi_port_set_bits_raw(struct device *dev,
+static int gpio_xlnx_axi_port_set_bits_raw(const struct device *dev,
 					   gpio_port_pins_t pins)
 {
 	struct gpio_xlnx_axi_data *data = dev->data;
@@ -161,7 +164,7 @@ static int gpio_xlnx_axi_port_set_bits_raw(struct device *dev,
 	return 0;
 }
 
-static int gpio_xlnx_axi_port_clear_bits_raw(struct device *dev,
+static int gpio_xlnx_axi_port_clear_bits_raw(const struct device *dev,
 					     gpio_port_pins_t pins)
 {
 	struct gpio_xlnx_axi_data *data = dev->data;
@@ -175,7 +178,7 @@ static int gpio_xlnx_axi_port_clear_bits_raw(struct device *dev,
 	return 0;
 }
 
-static int gpio_xlnx_axi_port_toggle_bits(struct device *dev,
+static int gpio_xlnx_axi_port_toggle_bits(const struct device *dev,
 					  gpio_port_pins_t pins)
 {
 	struct gpio_xlnx_axi_data *data = dev->data;
@@ -189,7 +192,7 @@ static int gpio_xlnx_axi_port_toggle_bits(struct device *dev,
 	return 0;
 }
 
-static int gpio_xlnx_axi_pin_interrupt_configure(struct device *dev,
+static int gpio_xlnx_axi_pin_interrupt_configure(const struct device *dev,
 						 gpio_pin_t pin,
 						 enum gpio_int_mode mode,
 						 enum gpio_int_trig trig)
@@ -206,7 +209,7 @@ static int gpio_xlnx_axi_pin_interrupt_configure(struct device *dev,
 	return -ENOTSUP;
 }
 
-static int gpio_xlnx_axi_manage_callback(struct device *dev,
+static int gpio_xlnx_axi_manage_callback(const struct device *dev,
 					 struct gpio_callback *cb,
 					 bool set)
 {
@@ -217,12 +220,12 @@ static int gpio_xlnx_axi_manage_callback(struct device *dev,
 	return -ENOTSUP;
 }
 
-static uint32_t gpio_xlnx_axi_get_pending_int(struct device *dev)
+static uint32_t gpio_xlnx_axi_get_pending_int(const struct device *dev)
 {
 	return 0;
 }
 
-static int gpio_xlnx_axi_init(struct device *dev)
+static int gpio_xlnx_axi_init(const struct device *dev)
 {
 	struct gpio_xlnx_axi_data *data = dev->data;
 
@@ -278,9 +281,9 @@ static const struct gpio_driver_api gpio_xlnx_axi_driver_api = {
 		.all_outputs = DT_INST_PROP_OR(n, xlnx_all_outputs2, 0),\
 	};								\
 									\
-	DEVICE_AND_API_INIT(gpio_xlnx_axi_##n##_2,			\
-			DT_LABEL(DT_CHILD(DT_DRV_INST(n), gpio2)),	\
+	DEVICE_DT_DEFINE(DT_CHILD(DT_DRV_INST(n), gpio2),		\
 			&gpio_xlnx_axi_init,				\
+			NULL,						\
 			&gpio_xlnx_axi_##n##_2_data,			\
 			&gpio_xlnx_axi_##n##_2_config,			\
 			POST_KERNEL,					\
@@ -306,8 +309,9 @@ static const struct gpio_driver_api gpio_xlnx_axi_driver_api = {
 		.all_outputs = DT_INST_PROP_OR(n, xlnx_all_outputs, 0),	\
 	};								\
 									\
-	DEVICE_AND_API_INIT(gpio_xlnx_axi_##n, DT_INST_LABEL(n),	\
+	DEVICE_DT_INST_DEFINE(n,					\
 			&gpio_xlnx_axi_init,				\
+			NULL,						\
 			&gpio_xlnx_axi_##n##_data,			\
 			&gpio_xlnx_axi_##n##_config,			\
 			POST_KERNEL,					\

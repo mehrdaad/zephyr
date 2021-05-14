@@ -9,7 +9,7 @@
 #include <init.h>
 #include <kernel.h>
 #include <device.h>
-#include <assert.h>
+#include <sys/__assert.h>
 #include <crypto/cipher.h>
 #include <drivers/clock_control/stm32_clock_control.h>
 #include <drivers/clock_control.h>
@@ -237,7 +237,7 @@ static int crypto_stm32_ctr_decrypt(struct cipher_ctx *ctx,
 	return ret;
 }
 
-static int crypto_stm32_get_unused_session_index(struct device *dev)
+static int crypto_stm32_get_unused_session_index(const struct device *dev)
 {
 	int i;
 
@@ -258,7 +258,7 @@ static int crypto_stm32_get_unused_session_index(struct device *dev)
 	return -1;
 }
 
-static int crypto_stm32_session_setup(struct device *dev,
+static int crypto_stm32_session_setup(const struct device *dev,
 				      struct cipher_ctx *ctx,
 				      enum cipher_algo algo,
 				      enum cipher_mode mode,
@@ -382,7 +382,7 @@ static int crypto_stm32_session_setup(struct device *dev,
 	return 0;
 }
 
-static int crypto_stm32_session_free(struct device *dev,
+static int crypto_stm32_session_free(const struct device *dev,
 				     struct cipher_ctx *ctx)
 {
 	int i;
@@ -416,20 +416,21 @@ static int crypto_stm32_session_free(struct device *dev,
 	return 0;
 }
 
-static int crypto_stm32_query_caps(struct device *dev)
+static int crypto_stm32_query_caps(const struct device *dev)
 {
 	return CRYP_SUPPORT;
 }
 
-static int crypto_stm32_init(struct device *dev)
+static int crypto_stm32_init(const struct device *dev)
 {
-	struct device *clk = device_get_binding(STM32_CLOCK_CONTROL_NAME);
+	const struct device *clk = DEVICE_DT_GET(STM32_CLOCK_CONTROL_NODE);
 	struct crypto_stm32_data *data = CRYPTO_STM32_DATA(dev);
 	const struct crypto_stm32_config *cfg = CRYPTO_STM32_CFG(dev);
 
-	__ASSERT_NO_MSG(clk);
-
-	clock_control_on(clk, (clock_control_subsys_t *)&cfg->pclken);
+	if (clock_control_on(clk, (clock_control_subsys_t *) &cfg->pclken) != 0) {
+		LOG_ERR("clock op failed\n");
+		return -EIO;
+	}
 
 	k_sem_init(&data->device_sem, 1, 1);
 	k_sem_init(&data->session_sem, 1, 1);
@@ -462,7 +463,7 @@ static struct crypto_stm32_config crypto_stm32_dev_config = {
 	}
 };
 
-DEVICE_AND_API_INIT(crypto_stm32, DT_INST_LABEL(0),
-		    crypto_stm32_init, &crypto_stm32_dev_data,
+DEVICE_DT_INST_DEFINE(0, crypto_stm32_init, NULL,
+		    &crypto_stm32_dev_data,
 		    &crypto_stm32_dev_config, POST_KERNEL,
 		    CONFIG_CRYPTO_INIT_PRIORITY, (void *)&crypto_enc_funcs);

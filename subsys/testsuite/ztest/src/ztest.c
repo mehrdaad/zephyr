@@ -10,7 +10,7 @@
 #ifdef CONFIG_USERSPACE
 #include <sys/libc-hooks.h>
 #endif
-#include <power/reboot.h>
+#include <sys/reboot.h>
 
 #ifdef KERNEL
 static struct k_thread ztest_thread;
@@ -68,7 +68,9 @@ static int cleanup_test(struct unit_test *test)
 	 * Because we reuse the same k_thread structure this would
 	 * causes some problems.
 	 */
-	k_thread_abort(&ztest_thread);
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		k_thread_abort(&ztest_thread);
+	}
 #endif
 
 	if (!ret && mock_status == 1) {
@@ -79,6 +81,8 @@ static int cleanup_test(struct unit_test *test)
 		PRINT("Test %s failed: Unused mock return values\n",
 		      test->name);
 		ret = TC_FAIL;
+	} else {
+		;
 	}
 
 	return ret;
@@ -112,6 +116,17 @@ static void cpu_hold(void *arg1, void *arg2, void *arg3)
 
 	k_sem_give(&cpuhold_sem);
 
+#if defined(CONFIG_ARM64) && defined(CONFIG_FPU_SHARING)
+	/*
+	 * We'll be spinning with IRQs disabled. The flush-your-FPU request
+	 * IPI will never be serviced during that time. Therefore we flush
+	 * the FPU preemptively here to prevent any other CPU waiting after
+	 * this CPU forever and deadlock the system.
+	 */
+	extern void z_arm64_flush_local_fpu(void);
+	z_arm64_flush_local_fpu();
+#endif
+
 	while (cpuhold_active) {
 		k_busy_wait(1000);
 	}
@@ -130,7 +145,9 @@ static void cpu_hold(void *arg1, void *arg2, void *arg3)
 void z_impl_z_test_1cpu_start(void)
 {
 	cpuhold_active = 1;
-
+#ifdef CONFIG_THREAD_NAME
+	char tname[CONFIG_THREAD_MAX_NAME_LEN];
+#endif
 	k_sem_init(&cpuhold_sem, 0, 999);
 
 	/* Spawn N-1 threads to "hold" the other CPUs, waiting for
@@ -145,6 +162,10 @@ void z_impl_z_test_1cpu_start(void)
 				cpuhold_stacks[i], CPUHOLD_STACK_SZ,
 				(k_thread_entry_t) cpu_hold, NULL, NULL, NULL,
 				K_HIGHEST_THREAD_PRIO, 0, K_NO_WAIT);
+#ifdef CONFIG_THREAD_NAME
+		snprintk(tname, CONFIG_THREAD_MAX_NAME_LEN, "cpuhold%02d", i);
+		k_thread_name_set(&cpuhold_threads[i], tname);
+#endif
 		k_sem_take(&cpuhold_sem, K_FOREVER);
 	}
 }
@@ -278,25 +299,30 @@ K_THREAD_STACK_DEFINE(ztest_thread_stack, CONFIG_ZTEST_STACKSIZE +
 		      CONFIG_TEST_EXTRA_STACKSIZE);
 static ZTEST_BMEM int test_result;
 
+static void test_finalize(void)
+{
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		k_thread_abort(&ztest_thread);
+		k_thread_abort(k_current_get());
+	}
+}
+
 void ztest_test_fail(void)
 {
 	test_result = -1;
-	k_thread_abort(&ztest_thread);
-	k_thread_abort(k_current_get());
+	test_finalize();
 }
 
 void ztest_test_pass(void)
 {
 	test_result = 0;
-	k_thread_abort(&ztest_thread);
-	k_thread_abort(k_current_get());
+	test_finalize();
 }
 
 void ztest_test_skip(void)
 {
 	test_result = -2;
-	k_thread_abort(&ztest_thread);
-	k_thread_abort(k_current_get());
+	test_finalize();
 }
 
 static void init_testing(void)
@@ -321,14 +347,21 @@ static int run_test(struct unit_test *test)
 	int ret = TC_PASS;
 
 	TC_START(test->name);
-	k_thread_create(&ztest_thread, ztest_thread_stack,
-			K_THREAD_STACK_SIZEOF(ztest_thread_stack),
-			(k_thread_entry_t) test_cb, (struct unit_test *)test,
-			NULL, NULL, CONFIG_ZTEST_THREAD_PRIORITY,
-			test->thread_options | K_INHERIT_PERMS,
-				K_NO_WAIT);
 
-	k_thread_join(&ztest_thread, K_FOREVER);
+	if (IS_ENABLED(CONFIG_MULTITHREADING)) {
+		k_thread_create(&ztest_thread, ztest_thread_stack,
+				K_THREAD_STACK_SIZEOF(ztest_thread_stack),
+				(k_thread_entry_t) test_cb, (struct unit_test *)test,
+				NULL, NULL, CONFIG_ZTEST_THREAD_PRIORITY,
+				test->thread_options | K_INHERIT_PERMS,
+					K_NO_WAIT);
+
+		k_thread_name_set(&ztest_thread, "ztest_thread");
+		k_thread_join(&ztest_thread, K_FOREVER);
+	} else {
+		test_result = 1;
+		run_test_functions(test);
+	}
 
 	phase = TEST_PHASE_TEARDOWN;
 	test->teardown();
@@ -363,8 +396,7 @@ void z_ztest_run_test_suite(const char *name, struct unit_test *suite)
 
 	init_testing();
 
-	PRINT("Running test suite %s\n", name);
-	PRINT_LINE;
+	TC_SUITE_START(name);
 	while (suite->test) {
 		fail += run_test(suite);
 		suite++;
@@ -373,11 +405,7 @@ void z_ztest_run_test_suite(const char *name, struct unit_test *suite)
 			break;
 		}
 	}
-	if (fail) {
-		TC_PRINT("Test suite %s failed.\n", name);
-	} else {
-		TC_PRINT("Test suite %s succeeded\n", name);
-	}
+	TC_SUITE_END(name, (fail > 0 ? TC_FAIL : TC_PASS));
 
 	test_status = (test_status || fail) ? 1 : 0;
 }
@@ -392,7 +420,6 @@ void end_report(void)
 }
 
 #ifdef CONFIG_USERSPACE
-struct k_mem_domain ztest_mem_domain;
 K_APPMEM_PARTITION_DEFINE(ztest_mem_partition);
 #endif
 
@@ -409,24 +436,18 @@ int main(void)
 void main(void)
 {
 #ifdef CONFIG_USERSPACE
-	struct k_mem_partition *parts[] = {
-#ifdef Z_LIBC_PARTITION_EXISTS
-		/* C library globals, stack canary storage, etc */
-		&z_libc_partition,
-#endif
-#ifdef Z_MALLOC_PARTITION_EXISTS
-		/* Required for access to malloc arena */
-		&z_malloc_partition,
-#endif
-		&ztest_mem_partition
-	};
-
-	/* Ztests just have one memory domain with one partition.
-	 * Any variables that user code may reference need to go in them,
-	 * using the ZTEST_DMEM and ZTEST_BMEM macros.
+	/* Partition containing globals tagged with ZTEST_DMEM and ZTEST_BMEM
+	 * macros. Any variables that user code may reference need to be
+	 * placed in this partition if no other memory domain configuration
+	 * is made.
 	 */
-	k_mem_domain_init(&ztest_mem_domain, ARRAY_SIZE(parts), parts);
-	k_mem_domain_add_thread(&ztest_mem_domain, k_current_get());
+	k_mem_domain_add_partition(&k_mem_domain_default,
+				   &ztest_mem_partition);
+#ifdef Z_MALLOC_PARTITION_EXISTS
+	/* Allow access to malloc() memory */
+	k_mem_domain_add_partition(&k_mem_domain_default,
+				   &z_malloc_partition);
+#endif
 #endif /* CONFIG_USERSPACE */
 
 	z_init_mock();

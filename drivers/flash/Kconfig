@@ -60,7 +60,11 @@ config FLASH_PAGE_LAYOUT
 
 source "drivers/flash/Kconfig.at45"
 
+source "drivers/flash/Kconfig.esp32"
+
 source "drivers/flash/Kconfig.nrf"
+
+source "drivers/flash/Kconfig.lpc"
 
 source "drivers/flash/Kconfig.mcux"
 
@@ -72,11 +76,11 @@ source "drivers/flash/Kconfig.nor"
 
 source "drivers/flash/Kconfig.stm32"
 
+source "drivers/flash/Kconfig.stm32_qspi"
+
 source "drivers/flash/Kconfig.sam0"
 
 source "drivers/flash/Kconfig.sam"
-
-source "drivers/flash/Kconfig.w25qxxdv"
 
 source "drivers/flash/Kconfig.simulator"
 

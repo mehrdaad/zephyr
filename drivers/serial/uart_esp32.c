@@ -7,10 +7,10 @@
 #define DT_DRV_COMPAT espressif_esp32_uart
 
 /* Include esp-idf headers first to avoid redefining BIT() macro */
-#include <rom/ets_sys.h>
+#include <esp32/rom/ets_sys.h>
 #include <soc/dport_reg.h>
 
-#include <rom/gpio.h>
+#include <esp32/rom/gpio.h>
 
 #include <soc/gpio_sig_map.h>
 
@@ -20,6 +20,7 @@
 #include <drivers/clock_control.h>
 #include <errno.h>
 #include <sys/util.h>
+#include <esp_attr.h>
 
 
 /*
@@ -63,7 +64,7 @@ struct uart_esp32_regs_t {
 struct uart_esp32_config {
 
 	struct uart_device_config dev_conf;
-	const char *clock_name;
+	const struct device *clock_dev;
 
 	const struct {
 		int tx_out;
@@ -90,7 +91,6 @@ struct uart_esp32_config {
 /* driver data */
 struct uart_esp32_data {
 	struct uart_config uart_config;
-	struct device *clock_dev;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 	uart_irq_callback_user_data_t irq_cb;
 	void *irq_cb_data;
@@ -130,7 +130,7 @@ struct uart_esp32_data {
 #define DPORT_UART0_CLK_EN DPORT_UART_CLK_EN
 #define DPORT_UART0_RST DPORT_UART_RST
 
-static int uart_esp32_poll_in(struct device *dev, unsigned char *p_char)
+static int uart_esp32_poll_in(const struct device *dev, unsigned char *p_char)
 {
 
 	if (UART_RXFIFO_COUNT(DEV_BASE(dev)->status) == 0) {
@@ -141,7 +141,7 @@ static int uart_esp32_poll_in(struct device *dev, unsigned char *p_char)
 	return 0;
 }
 
-static void uart_esp32_poll_out(struct device *dev,
+static IRAM_ATTR void uart_esp32_poll_out(const struct device *dev,
 				unsigned char c)
 {
 	/* Wait for space in FIFO */
@@ -153,7 +153,7 @@ static void uart_esp32_poll_out(struct device *dev,
 	DEV_BASE(dev)->fifo = (uint32_t)c;
 }
 
-static int uart_esp32_err_check(struct device *dev)
+static int uart_esp32_err_check(const struct device *dev)
 {
 	uint32_t err = UART_GET_PARITY_ERR(DEV_BASE(dev)->int_st)
 		    | UART_GET_FRAME_ERR(DEV_BASE(dev)->int_st);
@@ -161,7 +161,8 @@ static int uart_esp32_err_check(struct device *dev)
 	return err;
 }
 
-static int uart_esp32_config_get(struct device *dev, struct uart_config *cfg)
+static int uart_esp32_config_get(const struct device *dev,
+				 struct uart_config *cfg)
 {
 	struct uart_esp32_data *data = DEV_DATA(dev);
 
@@ -186,11 +187,11 @@ static int uart_esp32_config_get(struct device *dev, struct uart_config *cfg)
 	return 0;
 }
 
-static int uart_esp32_set_baudrate(struct device *dev, int baudrate)
+static int uart_esp32_set_baudrate(const struct device *dev, int baudrate)
 {
 	uint32_t sys_clk_freq = 0;
 
-	if (clock_control_get_rate(DEV_DATA(dev)->clock_dev,
+	if (clock_control_get_rate(DEV_CFG(dev)->clock_dev,
 				   DEV_CFG(dev)->peripheral_id,
 				   &sys_clk_freq)) {
 		return -EINVAL;
@@ -210,7 +211,7 @@ static int uart_esp32_set_baudrate(struct device *dev, int baudrate)
 	return 1;
 }
 
-static int uart_esp32_configure_pins(struct device *dev)
+static int uart_esp32_configure_pins(const struct device *dev)
 {
 	const struct uart_esp32_config *const cfg = DEV_CFG(dev);
 
@@ -239,7 +240,7 @@ static int uart_esp32_configure_pins(struct device *dev)
 	return 0;
 }
 
-static int uart_esp32_configure(struct device *dev,
+static int uart_esp32_configure(const struct device *dev,
 				const struct uart_config *cfg)
 {
 	uint32_t conf0 = UART_TICK_REF_ALWAYS_ON;
@@ -247,7 +248,7 @@ static int uart_esp32_configure(struct device *dev,
 		      | (UART_TX_FIFO_THRESH << UART_TXFIFO_EMPTY_THRHD_S);
 
 	uart_esp32_configure_pins(dev);
-	clock_control_on(DEV_DATA(dev)->clock_dev, DEV_CFG(dev)->peripheral_id);
+	clock_control_on(DEV_CFG(dev)->clock_dev, DEV_CFG(dev)->peripheral_id);
 
 	/*
 	 * Reset RX Buffer by reading all received bytes
@@ -313,14 +314,8 @@ static int uart_esp32_configure(struct device *dev,
 	return 0;
 }
 
-static int uart_esp32_init(struct device *dev)
+static int uart_esp32_init(const struct device *dev)
 {
-	struct uart_esp32_data *data = DEV_DATA(dev);
-
-	data->clock_dev = device_get_binding(DEV_CFG(dev)->clock_name);
-
-	__ASSERT_NO_MSG(data->clock_dev);
-
 	uart_esp32_configure(dev, &DEV_DATA(dev)->uart_config);
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
@@ -332,7 +327,7 @@ static int uart_esp32_init(struct device *dev)
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 
-static int uart_esp32_fifo_fill(struct device *dev,
+static int uart_esp32_fifo_fill(const struct device *dev,
 				const uint8_t *tx_data, int len)
 {
 	uint8_t num_tx = 0U;
@@ -345,7 +340,7 @@ static int uart_esp32_fifo_fill(struct device *dev,
 	return num_tx;
 }
 
-static int uart_esp32_fifo_read(struct device *dev,
+static int uart_esp32_fifo_read(const struct device *dev,
 				uint8_t *rx_data, const int len)
 {
 	uint8_t num_rx = 0U;
@@ -358,63 +353,63 @@ static int uart_esp32_fifo_read(struct device *dev,
 	return num_rx;
 }
 
-static void uart_esp32_irq_tx_enable(struct device *dev)
+static void uart_esp32_irq_tx_enable(const struct device *dev)
 {
 	DEV_BASE(dev)->int_clr |= UART_TXFIFO_EMPTY_INT_ENA;
 	DEV_BASE(dev)->int_ena |= UART_TXFIFO_EMPTY_INT_ENA;
 }
 
-static void uart_esp32_irq_tx_disable(struct device *dev)
+static void uart_esp32_irq_tx_disable(const struct device *dev)
 {
 	DEV_BASE(dev)->int_ena &= ~(UART_TXFIFO_EMPTY_INT_ENA);
 }
 
-static int uart_esp32_irq_tx_ready(struct device *dev)
+static int uart_esp32_irq_tx_ready(const struct device *dev)
 {
 	return (UART_TXFIFO_COUNT(DEV_BASE(dev)->status) < UART_FIFO_LIMIT);
 }
 
-static void uart_esp32_irq_rx_enable(struct device *dev)
+static void uart_esp32_irq_rx_enable(const struct device *dev)
 {
 	DEV_BASE(dev)->int_clr |= UART_RXFIFO_FULL_INT_ENA;
 	DEV_BASE(dev)->int_ena |= UART_RXFIFO_FULL_INT_ENA;
 }
 
-static void uart_esp32_irq_rx_disable(struct device *dev)
+static void uart_esp32_irq_rx_disable(const struct device *dev)
 {
 	DEV_BASE(dev)->int_ena &= ~(UART_RXFIFO_FULL_INT_ENA);
 }
 
-static int uart_esp32_irq_tx_complete(struct device *dev)
+static int uart_esp32_irq_tx_complete(const struct device *dev)
 {
 	/* check if TX FIFO is empty */
 	return (UART_TXFIFO_COUNT(DEV_BASE(dev)->status) == 0 ? 1 : 0);
 }
 
-static int uart_esp32_irq_rx_ready(struct device *dev)
+static int uart_esp32_irq_rx_ready(const struct device *dev)
 {
 	return (UART_RXFIFO_COUNT(DEV_BASE(dev)->status) > 0);
 }
 
-static void uart_esp32_irq_err_enable(struct device *dev)
+static void uart_esp32_irq_err_enable(const struct device *dev)
 {
 	/* enable framing, parity */
 	DEV_BASE(dev)->int_ena |= UART_FRM_ERR_INT_ENA
 				  | UART_PARITY_ERR_INT_ENA;
 }
 
-static void uart_esp32_irq_err_disable(struct device *dev)
+static void uart_esp32_irq_err_disable(const struct device *dev)
 {
 	DEV_BASE(dev)->int_ena &= ~(UART_FRM_ERR_INT_ENA);
 	DEV_BASE(dev)->int_ena &= ~(UART_PARITY_ERR_INT_ENA);
 }
 
-static int uart_esp32_irq_is_pending(struct device *dev)
+static int uart_esp32_irq_is_pending(const struct device *dev)
 {
 	return uart_esp32_irq_rx_ready(dev) || uart_esp32_irq_tx_ready(dev);
 }
 
-static int uart_esp32_irq_update(struct device *dev)
+static int uart_esp32_irq_update(const struct device *dev)
 {
 	DEV_BASE(dev)->int_clr |= UART_RXFIFO_FULL_INT_ENA;
 	DEV_BASE(dev)->int_clr |= UART_TXFIFO_EMPTY_INT_ENA;
@@ -422,7 +417,7 @@ static int uart_esp32_irq_update(struct device *dev)
 	return 1;
 }
 
-static void uart_esp32_irq_callback_set(struct device *dev,
+static void uart_esp32_irq_callback_set(const struct device *dev,
 					uart_irq_callback_user_data_t cb,
 					void *cb_data)
 {
@@ -430,9 +425,8 @@ static void uart_esp32_irq_callback_set(struct device *dev,
 	DEV_DATA(dev)->irq_cb_data = cb_data;
 }
 
-void uart_esp32_isr(void *arg)
+void uart_esp32_isr(const struct device *dev)
 {
-	struct device *dev = arg;
 	struct uart_esp32_data *data = DEV_DATA(dev);
 
 	/* Verify if the callback has been registered */
@@ -443,7 +437,7 @@ void uart_esp32_isr(void *arg)
 
 #endif /* CONFIG_UART_INTERRUPT_DRIVEN */
 
-static const struct uart_driver_api uart_esp32_api = {
+static const DRAM_ATTR struct uart_driver_api uart_esp32_api = {
 	.poll_in = uart_esp32_poll_in,
 	.poll_out = uart_esp32_poll_out,
 	.err_check = uart_esp32_err_check,
@@ -470,20 +464,20 @@ static const struct uart_driver_api uart_esp32_api = {
 
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
 #define ESP32_UART_IRQ_HANDLER_DECL(idx) \
-	static void uart_esp32_irq_config_func_##idx(struct device *dev)
+	static void uart_esp32_irq_config_func_##idx(const struct device *dev)
 
 #define ESP32_UART_IRQ_HANDLER_FUNC(idx) \
 	.irq_config_func = uart_esp32_irq_config_func_##idx,
 
 #define ESP32_UART_IRQ_HANDLER(idx)					     \
-	static void uart_esp32_irq_config_func_##idx(struct device *dev)     \
+	static void uart_esp32_irq_config_func_##idx(const struct device *dev) \
 	{								     \
 		esp32_rom_intr_matrix_set(0, ETS_UART##idx##_INTR_SOURCE,    \
 					  INST_##idx##_ESPRESSIF_ESP32_UART_IRQ_0); \
 		IRQ_CONNECT(INST_##idx##_ESPRESSIF_ESP32_UART_IRQ_0,	     \
 			    1,						     \
 			    uart_esp32_isr,				     \
-			    DEVICE_GET(uart_esp32_##idx),		     \
+			    DEVICE_DT_INST_GET(idx),			     \
 			    0);						     \
 		irq_enable(INST_##idx##_ESPRESSIF_ESP32_UART_IRQ_0);	     \
 	}
@@ -495,14 +489,14 @@ static const struct uart_driver_api uart_esp32_api = {
 #endif
 #define ESP32_UART_INIT(idx)						       \
 ESP32_UART_IRQ_HANDLER_DECL(idx);					       \
-static const struct uart_esp32_config uart_esp32_cfg_port_##idx = {	       \
+static const DRAM_ATTR struct uart_esp32_config uart_esp32_cfg_port_##idx = {	       \
 	.dev_conf = {							       \
 		.base =							       \
 		    (uint8_t *)DT_INST_REG_ADDR(idx), \
 		ESP32_UART_IRQ_HANDLER_FUNC(idx)			       \
 	},								       \
 											   \
-	.clock_name = DT_INST_CLOCKS_LABEL(idx),			       \
+	.clock_dev = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(idx)),		       \
 											   \
 	.signals = {							       \
 		.tx_out = U##idx##TXD_OUT_IDX,				       \
@@ -540,9 +534,9 @@ static struct uart_esp32_data uart_esp32_data_##idx = {			       \
 	}								       \
 };									       \
 									       \
-DEVICE_AND_API_INIT(uart_esp32_##idx,					       \
-		    DT_INST_LABEL(idx),		       \
+DEVICE_DT_INST_DEFINE(idx,						       \
 		    uart_esp32_init,					       \
+		    NULL,						       \
 		    &uart_esp32_data_##idx,				       \
 		    &uart_esp32_cfg_port_##idx,				       \
 		    PRE_KERNEL_1,					       \

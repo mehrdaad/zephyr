@@ -30,6 +30,11 @@ static int test_fs_init(void)
 		return -EINVAL;
 	}
 
+	/* Attempt to re-register a file system */
+	if (fs_register(TEST_FS_1, &temp_fs) != -EALREADY) {
+		return -EINVAL;
+	}
+
 	if (fs_mount(&test_fs_mnt_1)) {
 		return -EINVAL;
 	}
@@ -69,6 +74,11 @@ static int test_fs_readmount(void)
 
 static int test_fs_deinit(void)
 {
+	/* NULL parameter */
+	if (fs_unregister(TEST_FS_1, NULL) == 0) {
+		return -EINVAL;
+	}
+
 	if (fs_unregister(TEST_FS_1, &temp_fs)) {
 		return -EINVAL;
 	}
@@ -87,13 +97,15 @@ static int test_fs_deinit(void)
 	return 0;
 }
 
-static int test_fs_unsupported(void)
+static int test_fs_external(void)
 {
-	if (fs_register(FS_TYPE_END, &temp_fs) == 0) {
+	/* There is no way to statically determine whether a file
+	 * system is unsupported, but  */
+	if (fs_register(FS_TYPE_EXTERNAL_BASE, &temp_fs) != -ENOSPC) {
 		return TC_FAIL;
 	}
 
-	if (fs_unregister(FS_TYPE_END, &temp_fs) == 0) {
+	if (fs_unregister(FS_TYPE_EXTERNAL_BASE, &temp_fs) != -EINVAL) {
 		return TC_FAIL;
 	}
 
@@ -103,20 +115,20 @@ static int test_fs_unsupported(void)
 /**
  * @brief Multi file systems register and unregister
  *
- * @details register and unregister two file systems to test
- *          the system support multiple file system simultanously
+ * @details
+ *  Register and unregister two file systems to test the system support
+ *  multiple file system simultaneously
  *
- * @addtogroup filesystem_api
- *
- * @{
+ *@addtogroup filesystem_api
+ *@{
  */
 
 void test_fs_register(void)
 {
 	zassert_true(test_fs_init() == 0, "Failed to register filesystems");
 	zassert_true(test_fs_readmount() == 0, "Failed to readmount");
+	zassert_true(test_fs_external() == 0, "Supported other file system");
 	zassert_true(test_fs_deinit() == 0, "Failed to unregister filesystems");
-	zassert_true(test_fs_unsupported() == 0, "Supported other file system");
 }
 
 /**

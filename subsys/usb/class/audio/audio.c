@@ -774,7 +774,7 @@ static int audio_class_handle_req(struct usb_setup_packet *pSetup,
 	}
 }
 
-static int usb_audio_device_init(struct device *dev)
+static int usb_audio_device_init(const struct device *dev)
 {
 	LOG_DBG("Init Audio Device: dev %p (%s)", dev, dev->name);
 
@@ -896,7 +896,7 @@ static void audio_receive_cb(uint8_t ep, enum usb_dc_ep_cb_status_code status)
 	}
 }
 
-void usb_audio_register(struct device *dev,
+void usb_audio_register(const struct device *dev,
 			const struct usb_audio_ops *ops)
 {
 	struct usb_audio_dev_data *audio_dev_data = dev->data;
@@ -935,9 +935,9 @@ void usb_audio_register(struct device *dev,
 		.num_endpoints = ARRAY_SIZE(dev##_usb_audio_ep_data_##i), \
 		.endpoint = dev##_usb_audio_ep_data_##i,		  \
 	};								  \
-	DEVICE_AND_API_INIT(dev##_usb_audio_device_##i,			  \
-			    DT_LABEL(DT_INST(i, COMPAT_##dev)),		  \
+	DEVICE_DT_DEFINE(DT_INST(i, COMPAT_##dev),			  \
 			    &usb_audio_device_init,			  \
+			    NULL,					  \
 			    &dev##_audio_dev_data_##i,			  \
 			    &dev##_audio_config_##i, APPLICATION,	  \
 			    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,		  \

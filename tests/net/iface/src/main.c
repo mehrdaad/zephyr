@@ -75,12 +75,12 @@ struct net_if_test {
 	struct net_linkaddr ll_addr;
 };
 
-static int net_iface_dev_init(struct device *dev)
+static int net_iface_dev_init(const struct device *dev)
 {
 	return 0;
 }
 
-static uint8_t *net_iface_get_mac(struct device *dev)
+static uint8_t *net_iface_get_mac(const struct device *dev)
 {
 	struct net_if_test *data = dev->data;
 
@@ -108,7 +108,7 @@ static void net_iface_init(struct net_if *iface)
 			     NET_LINK_ETHERNET);
 }
 
-static int sender_iface(struct device *dev, struct net_pkt *pkt)
+static int sender_iface(const struct device *dev, struct net_pkt *pkt)
 {
 	if (!pkt->buffer) {
 		DBG("No data to send!\n");
@@ -150,7 +150,7 @@ NET_DEVICE_INIT_INSTANCE(net_iface1_test,
 			 "iface1",
 			 iface1,
 			 net_iface_dev_init,
-			 device_pm_control_nop,
+			 NULL,
 			 &net_iface1_data,
 			 NULL,
 			 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
@@ -163,7 +163,7 @@ NET_DEVICE_INIT_INSTANCE(net_iface2_test,
 			 "iface2",
 			 iface2,
 			 net_iface_dev_init,
-			 device_pm_control_nop,
+			 NULL,
 			 &net_iface2_data,
 			 NULL,
 			 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
@@ -176,7 +176,7 @@ NET_DEVICE_INIT_INSTANCE(net_iface3_test,
 			 "iface3",
 			 iface3,
 			 net_iface_dev_init,
-			 device_pm_control_nop,
+			 NULL,
 			 &net_iface3_data,
 			 NULL,
 			 CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
@@ -195,7 +195,7 @@ static struct eth_fake_context eth_fake_data;
 
 static void eth_fake_iface_init(struct net_if *iface)
 {
-	struct device *dev = net_if_get_device(iface);
+	const struct device *dev = net_if_get_device(iface);
 	struct eth_fake_context *ctx = dev->data;
 
 	ctx->iface = iface;
@@ -207,7 +207,7 @@ static void eth_fake_iface_init(struct net_if *iface)
 	ethernet_init(iface);
 }
 
-static int eth_fake_send(struct device *dev,
+static int eth_fake_send(const struct device *dev,
 			 struct net_pkt *pkt)
 {
 	ARG_UNUSED(dev);
@@ -216,12 +216,12 @@ static int eth_fake_send(struct device *dev,
 	return 0;
 }
 
-static enum ethernet_hw_caps eth_fake_get_capabilities(struct device *dev)
+static enum ethernet_hw_caps eth_fake_get_capabilities(const struct device *dev)
 {
 	return ETHERNET_PROMISC_MODE;
 }
 
-static int eth_fake_set_config(struct device *dev,
+static int eth_fake_set_config(const struct device *dev,
 			       enum ethernet_config_type type,
 			       const struct ethernet_config *config)
 {
@@ -252,7 +252,7 @@ static struct ethernet_api eth_fake_api_funcs = {
 	.send = eth_fake_send,
 };
 
-static int eth_fake_init(struct device *dev)
+static int eth_fake_init(const struct device *dev)
 {
 	struct eth_fake_context *ctx = dev->data;
 
@@ -261,7 +261,7 @@ static int eth_fake_init(struct device *dev)
 	return 0;
 }
 
-ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, device_pm_control_nop,
+ETH_NET_DEVICE_INIT(eth_fake, "eth_fake", eth_fake_init, NULL,
 		    &eth_fake_data, NULL, CONFIG_ETH_INIT_PRIORITY,
 		    &eth_fake_api_funcs, NET_ETH_MTU);
 
@@ -718,6 +718,14 @@ static void test_v6_addr_add(void)
 	zassert_true(ret, "Cannot add IPv6 address");
 }
 
+static void test_v6_addr_add_mcast_twice(void)
+{
+	struct net_if_mcast_addr *maddr;
+
+	maddr = net_if_ipv6_maddr_add(iface1, &in6addr_mcast);
+	zassert_equal(maddr, NULL, "Address was added twice");
+}
+
 static void test_v6_addr_lookup(void)
 {
 	int ret;
@@ -859,6 +867,7 @@ void test_main(void)
 			 ztest_user_unit_test(test_v4_addr_lookup_user),
 			 ztest_unit_test(test_v4_addr_rm_user_from_userspace),
 			 ztest_unit_test(test_v6_addr_add),
+			 ztest_unit_test(test_v6_addr_add_mcast_twice),
 			 ztest_unit_test(test_v6_addr_lookup),
 			 ztest_unit_test(test_v6_addr_rm),
 			 ztest_unit_test(test_v6_addr_add_user_from_userspace),

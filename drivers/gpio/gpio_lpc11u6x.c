@@ -103,11 +103,11 @@ struct gpio_lpc11u6x_config {
 struct gpio_lpc11u6x_data {
 	/* gpio_driver_data needs to be first. */
 	struct gpio_driver_data common;
-	struct device *pinmux_dev;
+	const struct device *pinmux_dev;
 	sys_slist_t cb_list;
 };
 
-static int gpio_lpc11u6x_pin_configure(struct device *port,
+static int gpio_lpc11u6x_pin_configure(const struct device *port,
 				       gpio_pin_t pin, gpio_flags_t flags)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(port);
@@ -184,7 +184,7 @@ static int gpio_lpc11u6x_pin_configure(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_port_get_raw(struct device *port,
+static int gpio_lpc11u6x_port_get_raw(const struct device *port,
 				      gpio_port_value_t *value)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(port);
@@ -196,7 +196,7 @@ static int gpio_lpc11u6x_port_get_raw(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_port_set_masked_raw(struct device *port,
+static int gpio_lpc11u6x_port_set_masked_raw(const struct device *port,
 					     gpio_port_pins_t mask,
 					     gpio_port_value_t value)
 {
@@ -220,7 +220,7 @@ static int gpio_lpc11u6x_port_set_masked_raw(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_port_set_bits_raw(struct device *port,
+static int gpio_lpc11u6x_port_set_bits_raw(const struct device *port,
 					   gpio_port_pins_t pins)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(port);
@@ -232,7 +232,7 @@ static int gpio_lpc11u6x_port_set_bits_raw(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_port_clear_bits_raw(struct device *port,
+static int gpio_lpc11u6x_port_clear_bits_raw(const struct device *port,
 					     gpio_port_pins_t pins)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(port);
@@ -244,7 +244,7 @@ static int gpio_lpc11u6x_port_clear_bits_raw(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_port_toggle_bits(struct device *port,
+static int gpio_lpc11u6x_port_toggle_bits(const struct device *port,
 					  gpio_port_pins_t pins)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(port);
@@ -318,7 +318,7 @@ pintsel_detach(const struct gpio_lpc11u6x_shared *shared, uint8_t intpin)
 	return -EINVAL;
 }
 
-static int gpio_lpc11u6x_pin_interrupt_configure(struct device *port,
+static int gpio_lpc11u6x_pin_interrupt_configure(const struct device *port,
 						 gpio_pin_t pin,
 						 enum gpio_int_mode mode,
 						 enum gpio_int_trig trig)
@@ -403,7 +403,7 @@ static int gpio_lpc11u6x_pin_interrupt_configure(struct device *port,
 	return 0;
 }
 
-static int gpio_lpc11u6x_manage_callback(struct device *port,
+static int gpio_lpc11u6x_manage_callback(const struct device *port,
 					 struct gpio_callback *cb, bool set)
 {
 	struct gpio_lpc11u6x_data *data = DEV_DATA(port);
@@ -411,33 +411,24 @@ static int gpio_lpc11u6x_manage_callback(struct device *port,
 	return gpio_manage_callback(&data->cb_list, cb, set);
 }
 
-static uint32_t gpio_lpc11u6x_get_pending_int(struct device *dev)
+static uint32_t gpio_lpc11u6x_get_pending_int(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
 	return -ENOTSUP;
 }
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
-DEVICE_DECLARE(gpio_lpc11u6x_0);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio1), okay)
-DEVICE_DECLARE(gpio_lpc11u6x_1);
-#endif
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio2), okay)
-DEVICE_DECLARE(gpio_lpc11u6x_2);
-#endif
-
-static void gpio_lpc11u6x_isr(void *arg)
+static void gpio_lpc11u6x_isr(const void *arg)
 {
-	struct gpio_lpc11u6x_shared *shared = arg;
+	struct gpio_lpc11u6x_shared *shared =
+		(struct gpio_lpc11u6x_shared *)arg;
 	struct lpc11u6x_pint_regs *pint_regs = (struct lpc11u6x_pint_regs *)
 		(shared->gpio_base + LPC11U6X_PINT_REGS);
 	uint32_t *pintsel_reg =
 		(uint32_t *) (shared->syscon_base + LPC11U6X_PINTSEL_REGS);
 	uint8_t irq;
 	uint32_t pins[3] = { 0, 0, 0 };
-	struct device *port;
+	const struct device *port;
 	struct gpio_lpc11u6x_data *data;
 
 	for (irq = 0; irq < shared->nirqs; irq++) {
@@ -468,21 +459,21 @@ static void gpio_lpc11u6x_isr(void *arg)
 	/* For each port with active pins, fire the GPIO interrupt callbacks. */
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
 	if (pins[0]) {
-		port = DEVICE_GET(gpio_lpc11u6x_0);
+		port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 		data = port->data;
 		gpio_fire_callbacks(&data->cb_list, port, pins[0]);
 	}
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio1), okay)
 	if (pins[1]) {
-		port = DEVICE_GET(gpio_lpc11u6x_1);
+		port = DEVICE_DT_GET(DT_NODELABEL(gpio1));
 		data = port->data;
 		gpio_fire_callbacks(&data->cb_list, port, pins[1]);
 	}
 #endif
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio2), okay)
 	if (pins[2]) {
-		port = DEVICE_GET(gpio_lpc11u6x_2);
+		port = DEVICE_DT_GET(DT_NODELABEL(gpio2));
 		data = port->data;
 		gpio_fire_callbacks(&data->cb_list, port, pins[2]);
 	}
@@ -522,11 +513,11 @@ do {							                \
 	irq_enable(DT_INST_IRQ_BY_IDX(0, n, irq));			\
 } while (0)
 
-static int gpio_lpc11u6x_init(struct device *dev)
+static int gpio_lpc11u6x_init(const struct device *dev)
 {
 	const struct gpio_lpc11u6x_config *config = DEV_CFG(dev);
 	struct gpio_lpc11u6x_data *data = DEV_DATA(dev);
-	struct device *clock_dev;
+	const struct device *clock_dev;
 	int ret;
 	static bool gpio_ready;
 
@@ -597,9 +588,9 @@ static const struct gpio_lpc11u6x_config				\
 									\
 static struct gpio_lpc11u6x_data gpio_lpc11u6x_data_##id;		\
 									\
-DEVICE_AND_API_INIT(gpio_lpc11u6x_##id,					\
-		    DT_LABEL(DT_NODELABEL(gpio##id)),			\
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio##id),				\
 		    &gpio_lpc11u6x_init,				\
+		    NULL,						\
 		    &gpio_lpc11u6x_data_##id,				\
 		    &gpio_lpc11u6x_config_##id,				\
 		    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,	\

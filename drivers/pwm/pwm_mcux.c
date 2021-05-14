@@ -31,7 +31,7 @@ struct pwm_mcux_data {
 	pwm_signal_param_t channel[CHANNEL_COUNT];
 };
 
-static int mcux_pwm_pin_set(struct device *dev, uint32_t pwm,
+static int mcux_pwm_pin_set(const struct device *dev, uint32_t pwm,
 			    uint32_t period_cycles, uint32_t pulse_cycles,
 			    pwm_flags_t flags)
 {
@@ -108,7 +108,7 @@ static int mcux_pwm_pin_set(struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-static int mcux_pwm_get_cycles_per_sec(struct device *dev, uint32_t pwm,
+static int mcux_pwm_get_cycles_per_sec(const struct device *dev, uint32_t pwm,
 				       uint64_t *cycles)
 {
 	const struct pwm_mcux_config *config = dev->config;
@@ -118,7 +118,7 @@ static int mcux_pwm_get_cycles_per_sec(struct device *dev, uint32_t pwm,
 	return 0;
 }
 
-static int pwm_mcux_init(struct device *dev)
+static int pwm_mcux_init(const struct device *dev)
 {
 	const struct pwm_mcux_config *config = dev->config;
 	struct pwm_mcux_data *data = dev->data;
@@ -163,9 +163,9 @@ static const struct pwm_driver_api pwm_mcux_driver_api = {
 		.clock_source = kCLOCK_IpgClk,				  \
 	};								  \
 									  \
-	DEVICE_AND_API_INIT(pwm_mcux_ ## n,				  \
-			    DT_INST_LABEL(n),				  \
+	DEVICE_DT_INST_DEFINE(n,					  \
 			    pwm_mcux_init,				  \
+			    NULL,					  \
 			    &pwm_mcux_data_ ## n,			  \
 			    &pwm_mcux_config_ ## n,			  \
 			    POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,\

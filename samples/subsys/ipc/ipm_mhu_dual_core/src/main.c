@@ -14,7 +14,7 @@ enum cpu_id_t {
 	MHU_CPU_MAX,
 };
 
-struct device *mhu0;
+const struct device *mhu0;
 
 static void main_cpu_0(void)
 {
@@ -32,7 +32,7 @@ static void main_cpu_1(void)
 	}
 }
 
-static void mhu_isr_callback(struct device *dev, void *context,
+static void mhu_isr_callback(const struct device *dev, void *context,
 			     uint32_t cpu_id, volatile void *data)
 {
 	const uint32_t set_mhu = 1;
@@ -49,8 +49,8 @@ void main(void)
 {
 	printk("IPM MHU sample on %s\n", CONFIG_BOARD);
 
-	mhu0 = device_get_binding(DT_LABEL(DT_INST(0, arm_mhu)));
-	if (!mhu0) {
+	mhu0 = DEVICE_DT_GET_ANY(arm_mhu);
+	if (!(mhu0 && device_is_ready(mhu0))) {
 		printk("CPU %d, get MHU0 fail!\n",
 				sse_200_platform_get_cpu_id());
 		while (1) {

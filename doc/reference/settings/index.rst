@@ -22,6 +22,11 @@ and from a string type.
 For an example of the settings subsystem refer to
 :ref:`the sample <settings_subsys_sample>`.
 
+.. note::
+
+   As of Zephyr release 2.1 the recommended backend for non-filesystem
+   storage is :ref:`NVS <nvs_api>`.
+
 Handlers
 ********
 
@@ -202,7 +207,7 @@ up from where it was before restart.
 .. code-block:: c
 
     #include <zephyr.h>
-    #include <power/reboot.h>
+    #include <sys/reboot.h>
     #include <settings/settings.h>
     #include <sys/printk.h>
     #include <inttypes.h>

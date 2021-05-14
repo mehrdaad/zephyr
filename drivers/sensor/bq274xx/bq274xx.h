@@ -79,7 +79,10 @@ LOG_MODULE_REGISTER(bq274xx, CONFIG_SENSOR_LOG_LEVEL);
 #define BQ274XX_DELAY 1000
 
 struct bq274xx_data {
-	struct device *i2c;
+	const struct device *i2c;
+#ifdef CONFIG_BQ274XX_LAZY_CONFIGURE
+	bool lazy_loaded;
+#endif
 	uint16_t voltage;
 	int16_t avg_current;
 	int16_t stdby_current;

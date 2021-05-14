@@ -67,7 +67,7 @@ static uint8_t chan_id2cc_idx(uint8_t chan_id)
 	return cc_idx;
 }
 
-static int counter_gecko_start(struct device *dev)
+static int counter_gecko_start(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
@@ -76,7 +76,7 @@ static int counter_gecko_start(struct device *dev)
 	return 0;
 }
 
-static int counter_gecko_stop(struct device *dev)
+static int counter_gecko_stop(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
@@ -85,7 +85,7 @@ static int counter_gecko_stop(struct device *dev)
 	return 0;
 }
 
-static int counter_gecko_get_value(struct device *dev, uint32_t *ticks)
+static int counter_gecko_get_value(const struct device *dev, uint32_t *ticks)
 {
 	ARG_UNUSED(dev);
 
@@ -93,7 +93,7 @@ static int counter_gecko_get_value(struct device *dev, uint32_t *ticks)
 	return 0;
 }
 
-static int counter_gecko_set_top_value(struct device *dev,
+static int counter_gecko_set_top_value(const struct device *dev,
 				       const struct counter_top_cfg *cfg)
 {
 	struct counter_gecko_data *const dev_data = DEV_DATA(dev);
@@ -146,21 +146,14 @@ static int counter_gecko_set_top_value(struct device *dev,
 	return err;
 }
 
-static uint32_t counter_gecko_get_top_value(struct device *dev)
+static uint32_t counter_gecko_get_top_value(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
 	return RTCC_ChannelCCVGet(1);
 }
 
-static uint32_t counter_gecko_get_max_relative_alarm(struct device *dev)
-{
-	ARG_UNUSED(dev);
-
-	return RTCC_ChannelCCVGet(1);
-}
-
-static int counter_gecko_set_alarm(struct device *dev, uint8_t chan_id,
+static int counter_gecko_set_alarm(const struct device *dev, uint8_t chan_id,
 				   const struct counter_alarm_cfg *alarm_cfg)
 {
 	uint32_t count = RTCC_CounterGet();
@@ -204,7 +197,8 @@ static int counter_gecko_set_alarm(struct device *dev, uint8_t chan_id,
 	return 0;
 }
 
-static int counter_gecko_cancel_alarm(struct device *dev, uint8_t chan_id)
+static int counter_gecko_cancel_alarm(const struct device *dev,
+				      uint8_t chan_id)
 {
 	struct counter_gecko_data *const dev_data = DEV_DATA(dev);
 
@@ -224,14 +218,14 @@ static int counter_gecko_cancel_alarm(struct device *dev, uint8_t chan_id)
 	return 0;
 }
 
-static uint32_t counter_gecko_get_pending_int(struct device *dev)
+static uint32_t counter_gecko_get_pending_int(const struct device *dev)
 {
 	ARG_UNUSED(dev);
 
 	return 0;
 }
 
-static int counter_gecko_init(struct device *dev)
+static int counter_gecko_init(const struct device *dev)
 {
 	const struct counter_gecko_config *const dev_cfg = DEV_CFG(dev);
 
@@ -326,16 +320,13 @@ static const struct counter_driver_api counter_gecko_driver_api = {
 	.set_top_value = counter_gecko_set_top_value,
 	.get_pending_int = counter_gecko_get_pending_int,
 	.get_top_value = counter_gecko_get_top_value,
-	.get_max_relative_alarm = counter_gecko_get_max_relative_alarm,
 };
 
 /* RTCC0 */
 
-DEVICE_DECLARE(counter_gecko_0);
-
 ISR_DIRECT_DECLARE(counter_gecko_isr_0)
 {
-	struct device *const dev = DEVICE_GET(counter_gecko_0);
+	const struct device *dev = DEVICE_DT_INST_GET(0);
 	struct counter_gecko_data *const dev_data = DEV_DATA(dev);
 	counter_alarm_callback_t alarm_callback;
 	uint32_t count = RTCC_CounterGet();
@@ -391,7 +382,7 @@ static const struct counter_gecko_config counter_gecko_0_config = {
 
 static struct counter_gecko_data counter_gecko_0_data;
 
-DEVICE_AND_API_INIT(counter_gecko_0, DT_INST_LABEL(0),
-	counter_gecko_init, &counter_gecko_0_data, &counter_gecko_0_config,
+DEVICE_DT_INST_DEFINE(0, counter_gecko_init, NULL,
+	&counter_gecko_0_data, &counter_gecko_0_config,
 	PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 	&counter_gecko_driver_api);

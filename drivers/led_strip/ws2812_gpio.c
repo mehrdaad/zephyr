@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(ws2812_gpio);
 #include <drivers/clock_control/nrf_clock_control.h>
 
 struct ws2812_gpio_data {
-	struct device *gpio;
+	const struct device *gpio;
 };
 
 struct ws2812_gpio_cfg {
@@ -31,12 +31,12 @@ struct ws2812_gpio_cfg {
 	bool has_white;
 };
 
-static struct ws2812_gpio_data *dev_data(struct device *dev)
+static struct ws2812_gpio_data *dev_data(const struct device *dev)
 {
 	return dev->data;
 }
 
-static const struct ws2812_gpio_cfg *dev_cfg(struct device *dev)
+static const struct ws2812_gpio_cfg *dev_cfg(const struct device *dev)
 {
 	return dev->config;
 }
@@ -98,7 +98,7 @@ static const struct ws2812_gpio_cfg *dev_cfg(struct device *dev)
 			[r] "l" (base),		\
 			[p] "l" (pin)); } while (0)
 
-static int send_buf(struct device *dev, uint8_t *buf, size_t len)
+static int send_buf(const struct device *dev, uint8_t *buf, size_t len)
 {
 	volatile uint32_t *base = (uint32_t *)&NRF_GPIO->OUTSET;
 	const uint32_t val = BIT(dev_cfg(dev)->pin);
@@ -153,7 +153,8 @@ static int send_buf(struct device *dev, uint8_t *buf, size_t len)
 	return rc;
 }
 
-static int ws2812_gpio_update_rgb(struct device *dev, struct led_rgb *pixels,
+static int ws2812_gpio_update_rgb(const struct device *dev,
+				  struct led_rgb *pixels,
 				  size_t num_pixels)
 {
 	const struct ws2812_gpio_cfg *config = dev->config;
@@ -178,7 +179,8 @@ static int ws2812_gpio_update_rgb(struct device *dev, struct led_rgb *pixels,
 	return send_buf(dev, (uint8_t *)pixels, num_pixels * (has_white ? 4 : 3));
 }
 
-static int ws2812_gpio_update_channels(struct device *dev, uint8_t *channels,
+static int ws2812_gpio_update_channels(const struct device *dev,
+				       uint8_t *channels,
 				       size_t num_channels)
 {
 	LOG_ERR("update_channels not implemented");
@@ -190,8 +192,6 @@ static const struct led_strip_driver_api ws2812_gpio_api = {
 	.update_channels = ws2812_gpio_update_channels,
 };
 
-#define WS2812_GPIO_LABEL(idx) \
-	(DT_INST_LABEL(idx))
 #define WS2812_GPIO_HAS_WHITE(idx) \
 	(DT_INST_PROP(idx, has_white_channel) == 1)
 #define WS2812_GPIO_DEV(idx) \
@@ -210,7 +210,7 @@ static const struct led_strip_driver_api ws2812_gpio_api = {
 
 #define WS2812_GPIO_DEVICE(idx)					\
 									\
-	static int ws2812_gpio_##idx##_init(struct device *dev)	\
+	static int ws2812_gpio_##idx##_init(const struct device *dev)	\
 	{								\
 		struct ws2812_gpio_data *data = dev_data(dev);		\
 									\
@@ -234,8 +234,9 @@ static const struct led_strip_driver_api ws2812_gpio_api = {
 		.has_white = WS2812_GPIO_HAS_WHITE(idx),		\
 	};								\
 									\
-	DEVICE_AND_API_INIT(ws2812_gpio_##idx, WS2812_GPIO_LABEL(idx),	\
+	DEVICE_DT_INST_DEFINE(idx,					\
 			    ws2812_gpio_##idx##_init,			\
+			    NULL,					\
 			    &ws2812_gpio_##idx##_data,			\
 			    &ws2812_gpio_##idx##_cfg, POST_KERNEL,	\
 			    CONFIG_LED_STRIP_INIT_PRIORITY,		\

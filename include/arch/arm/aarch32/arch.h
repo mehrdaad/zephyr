@@ -31,6 +31,7 @@
 #include <arch/common/ffs.h>
 #include <arch/arm/aarch32/nmi.h>
 #include <arch/arm/aarch32/asm_inline.h>
+#include <arch/common/sys_bitops.h>
 
 #ifdef CONFIG_CPU_CORTEX_M
 #include <arch/arm/aarch32/cortex_m/cpu.h>
@@ -39,6 +40,7 @@
 #elif defined(CONFIG_CPU_CORTEX_R)
 #include <arch/arm/aarch32/cortex_a_r/cpu.h>
 #include <arch/arm/aarch32/cortex_a_r/sys_io.h>
+#include <arch/arm/aarch32/cortex_a_r/timer.h>
 #endif
 
 #ifdef __cplusplus
@@ -182,10 +184,10 @@ extern "C" {
 /* Legacy case: retain containing extern "C" with C++ */
 #ifdef CONFIG_ARM_MPU
 #ifdef CONFIG_CPU_HAS_ARM_MPU
-#include <arch/arm/aarch32/cortex_m/mpu/arm_mpu.h>
+#include <arch/arm/aarch32/mpu/arm_mpu.h>
 #endif /* CONFIG_CPU_HAS_ARM_MPU */
 #ifdef CONFIG_CPU_HAS_NXP_MPU
-#include <arch/arm/aarch32/cortex_m/mpu/nxp_mpu.h>
+#include <arch/arm/aarch32/mpu/nxp_mpu.h>
 #endif /* CONFIG_CPU_HAS_NXP_MPU */
 #endif /* CONFIG_ARM_MPU */
 

@@ -45,7 +45,7 @@ LOG_MODULE_REGISTER(ws2812_spi);
 #define BYTES_PER_PX(has_white) ((has_white) ? 32 : 24)
 
 struct ws2812_spi_data {
-	struct device *spi;
+	const struct device *spi;
 };
 
 struct ws2812_spi_cfg {
@@ -57,12 +57,12 @@ struct ws2812_spi_cfg {
 	bool has_white;
 };
 
-static struct ws2812_spi_data *dev_data(struct device *dev)
+static struct ws2812_spi_data *dev_data(const struct device *dev)
 {
 	return dev->data;
 }
 
-static const struct ws2812_spi_cfg *dev_cfg(struct device *dev)
+static const struct ws2812_spi_cfg *dev_cfg(const struct device *dev)
 {
 	return dev->config;
 }
@@ -109,7 +109,8 @@ static inline void ws2812_reset_delay(void)
 	k_busy_wait(RESET_DELAY_USEC);
 }
 
-static int ws2812_strip_update_rgb(struct device *dev, struct led_rgb *pixels,
+static int ws2812_strip_update_rgb(const struct device *dev,
+				   struct led_rgb *pixels,
 				   size_t num_pixels)
 {
 	const struct ws2812_spi_cfg *cfg = dev_cfg(dev);
@@ -156,7 +157,8 @@ static int ws2812_strip_update_rgb(struct device *dev, struct led_rgb *pixels,
 	return rc;
 }
 
-static int ws2812_strip_update_channels(struct device *dev, uint8_t *channels,
+static int ws2812_strip_update_channels(const struct device *dev,
+					uint8_t *channels,
 					size_t num_channels)
 {
 	LOG_ERR("update_channels not implemented");
@@ -168,8 +170,6 @@ static const struct led_strip_driver_api ws2812_spi_api = {
 	.update_channels = ws2812_strip_update_channels,
 };
 
-#define WS2812_SPI_LABEL(idx) \
-	(DT_INST_LABEL(idx))
 #define WS2812_SPI_NUM_PIXELS(idx) \
 	(DT_INST_PROP(idx, chain_length))
 #define WS2812_SPI_HAS_WHITE(idx) \
@@ -207,7 +207,7 @@ static const struct led_strip_driver_api ws2812_spi_api = {
 		.has_white = WS2812_SPI_HAS_WHITE(idx),		\
 	};								\
 									\
-	static int ws2812_spi_##idx##_init(struct device *dev)		\
+	static int ws2812_spi_##idx##_init(const struct device *dev)	\
 	{								\
 		struct ws2812_spi_data *data = dev_data(dev);		\
 									\
@@ -221,9 +221,9 @@ static const struct led_strip_driver_api ws2812_spi_api = {
 		return 0;						\
 	}								\
 									\
-	DEVICE_AND_API_INIT(ws2812_spi_##idx,				\
-			    WS2812_SPI_LABEL(idx),			\
+	DEVICE_DT_INST_DEFINE(idx,					\
 			    ws2812_spi_##idx##_init,			\
+			    NULL,					\
 			    &ws2812_spi_##idx##_data,			\
 			    &ws2812_spi_##idx##_cfg,			\
 			    POST_KERNEL,				\

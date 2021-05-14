@@ -45,7 +45,8 @@ static uint8_t sx9500_reg_defaults[] = {
 	0x00,	/* No stuck timeout, no periodic compensation. */
 };
 
-static int sx9500_sample_fetch(struct device *dev, enum sensor_channel chan)
+static int sx9500_sample_fetch(const struct device *dev,
+			       enum sensor_channel chan)
 {
 	struct sx9500_data *data = (struct sx9500_data *) dev->data;
 
@@ -55,7 +56,7 @@ static int sx9500_sample_fetch(struct device *dev, enum sensor_channel chan)
 				 SX9500_REG_STAT, &data->prox_stat);
 }
 
-static int sx9500_channel_get(struct device *dev,
+static int sx9500_channel_get(const struct device *dev,
 			      enum sensor_channel chan,
 			      struct sensor_value *val)
 {
@@ -78,7 +79,7 @@ static const struct sensor_driver_api sx9500_api_funcs = {
 #endif
 };
 
-static int sx9500_init_chip(struct device *dev)
+static int sx9500_init_chip(const struct device *dev)
 {
 	struct sx9500_data *data = (struct sx9500_data *) dev->data;
 	uint8_t val;
@@ -108,7 +109,7 @@ static int sx9500_init_chip(struct device *dev)
 				  1 << CONFIG_SX9500_PROX_CHANNEL);
 }
 
-int sx9500_init(struct device *dev)
+int sx9500_init(const struct device *dev)
 {
 	struct sx9500_data *data = dev->data;
 
@@ -136,6 +137,6 @@ int sx9500_init(struct device *dev)
 
 struct sx9500_data sx9500_data;
 
-DEVICE_AND_API_INIT(sx9500, DT_INST_LABEL(0), sx9500_init, &sx9500_data,
+DEVICE_DT_INST_DEFINE(0, sx9500_init, NULL, &sx9500_data,
 		    NULL, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &sx9500_api_funcs);

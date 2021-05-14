@@ -61,7 +61,7 @@ static uint8_t sht3xd_compute_crc(uint16_t value)
 	return crc;
 }
 
-int sht3xd_write_command(struct device *dev, uint16_t cmd)
+int sht3xd_write_command(const struct device *dev, uint16_t cmd)
 {
 	uint8_t tx_buf[2] = { cmd >> 8, cmd & 0xFF };
 
@@ -69,7 +69,7 @@ int sht3xd_write_command(struct device *dev, uint16_t cmd)
 			 sht3xd_i2c_address(dev));
 }
 
-int sht3xd_write_reg(struct device *dev, uint16_t cmd, uint16_t val)
+int sht3xd_write_reg(const struct device *dev, uint16_t cmd, uint16_t val)
 {
 	uint8_t tx_buf[5];
 
@@ -83,10 +83,11 @@ int sht3xd_write_reg(struct device *dev, uint16_t cmd, uint16_t val)
 			 sht3xd_i2c_address(dev));
 }
 
-static int sht3xd_sample_fetch(struct device *dev, enum sensor_channel chan)
+static int sht3xd_sample_fetch(const struct device *dev,
+			       enum sensor_channel chan)
 {
 	struct sht3xd_data *data = dev->data;
-	struct device *i2c = sht3xd_i2c_device(dev);
+	const struct device *i2c = sht3xd_i2c_device(dev);
 	uint8_t address = sht3xd_i2c_address(dev);
 	uint8_t rx_buf[6];
 	uint16_t t_sample, rh_sample;
@@ -139,7 +140,7 @@ static int sht3xd_sample_fetch(struct device *dev, enum sensor_channel chan)
 	return 0;
 }
 
-static int sht3xd_channel_get(struct device *dev,
+static int sht3xd_channel_get(const struct device *dev,
 			      enum sensor_channel chan,
 			      struct sensor_value *val)
 {
@@ -177,11 +178,11 @@ static const struct sensor_driver_api sht3xd_driver_api = {
 	.channel_get = sht3xd_channel_get,
 };
 
-static int sht3xd_init(struct device *dev)
+static int sht3xd_init(const struct device *dev)
 {
 	struct sht3xd_data *data = dev->data;
 	const struct sht3xd_config *cfg = dev->config;
-	struct device *i2c = device_get_binding(cfg->bus_name);
+	const struct device *i2c = device_get_binding(cfg->bus_name);
 
 	if (i2c == NULL) {
 		LOG_DBG("Failed to get pointer to %s device!",
@@ -238,7 +239,7 @@ static const struct sht3xd_config sht3xd0_cfg = {
 #endif
 };
 
-DEVICE_AND_API_INIT(sht3xd0, DT_INST_LABEL(0),
-		    sht3xd_init, &sht3xd0_driver, &sht3xd0_cfg,
+DEVICE_DT_INST_DEFINE(0, sht3xd_init, NULL,
+		    &sht3xd0_driver, &sht3xd0_cfg,
 		    POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 		    &sht3xd_driver_api);

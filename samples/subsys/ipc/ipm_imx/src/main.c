@@ -9,7 +9,7 @@
 #include <device.h>
 #include <drivers/ipm.h>
 
-static void ipm_callback(struct device *dev, void *context,
+static void ipm_callback(const struct device *dev, void *context,
 			 uint32_t id, volatile void *data)
 {
 	int i;
@@ -31,10 +31,10 @@ static void ipm_callback(struct device *dev, void *context,
 
 void main(void)
 {
-	struct device *ipm;
+	const struct device *ipm;
 
-	ipm = device_get_binding("MU_B");
-	if (!ipm) {
+	ipm = DEVICE_DT_GET(DT_NODELABEL(mub));
+	if (!device_is_ready(ipm)) {
 		while (1) {
 		}
 	}

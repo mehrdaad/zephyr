@@ -13,6 +13,19 @@ zephyr_library_sources(
   thread_abort.c
   )
 
+zephyr_library_sources_ifdef(CONFIG_DEBUG_COREDUMP coredump.c)
+zephyr_library_sources_ifdef(CONFIG_THREAD_LOCAL_STORAGE __aeabi_read_tp.S)
+
+if(CONFIG_CORTEX_M_DEBUG_NULL_POINTER_EXCEPTION_DETECTION_DWT)
+  zephyr_library_sources(debug.c)
+endif()
+
+if(CONFIG_CORTEX_M_DWT)
+	if (CONFIG_TIMING_FUNCTIONS)
+		zephyr_library_sources(timing.c)
+	endif()
+endif()
+
 if (CONFIG_SW_VECTOR_RELAY)
 if (CONFIG_CPU_CORTEX_M_HAS_VTOR)
   set(relay_vector_table_sort_key relay_vectors)

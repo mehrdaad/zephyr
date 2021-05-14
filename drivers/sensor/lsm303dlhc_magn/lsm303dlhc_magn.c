@@ -15,7 +15,7 @@ LOG_MODULE_REGISTER(lsm303dlhc_magn, CONFIG_SENSOR_LOG_LEVEL);
 
 #include "lsm303dlhc_magn.h"
 
-static int lsm303dlhc_sample_fetch(struct device *dev,
+static int lsm303dlhc_sample_fetch(const struct device *dev,
 				   enum sensor_channel chan)
 {
 	const struct lsm303dlhc_magn_config *config = dev->config;
@@ -59,7 +59,7 @@ static void lsm303dlhc_convert(struct sensor_value *val,
 	val->val2 = (1000000 * raw_val / LSM303DLHC_MAGN_LSB_GAUSS) % 1000000;
 }
 
-static int lsm303dlhc_channel_get(struct device *dev,
+static int lsm303dlhc_channel_get(const struct device *dev,
 				  enum sensor_channel chan,
 				  struct sensor_value *val)
 {
@@ -91,7 +91,7 @@ static const struct sensor_driver_api lsm303dlhc_magn_driver_api = {
 	.channel_get = lsm303dlhc_channel_get,
 };
 
-static int lsm303dlhc_magn_init(struct device *dev)
+static int lsm303dlhc_magn_init(const struct device *dev)
 {
 	const struct lsm303dlhc_magn_config *config = dev->config;
 	struct lsm303dlhc_magn_data *drv_data = dev->data;
@@ -139,7 +139,7 @@ static const struct lsm303dlhc_magn_config lsm303dlhc_magn_config = {
 
 static struct lsm303dlhc_magn_data lsm303dlhc_magn_driver;
 
-DEVICE_AND_API_INIT(lsm303dlhc_magn, DT_INST_LABEL(0),
-		    lsm303dlhc_magn_init, &lsm303dlhc_magn_driver,
+DEVICE_DT_INST_DEFINE(0, lsm303dlhc_magn_init, NULL,
+		    &lsm303dlhc_magn_driver,
 		    &lsm303dlhc_magn_config, POST_KERNEL,
 		    CONFIG_SENSOR_INIT_PRIORITY, &lsm303dlhc_magn_driver_api);

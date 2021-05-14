@@ -21,7 +21,7 @@
 
 LOG_MODULE_REGISTER(MPR, CONFIG_SENSOR_LOG_LEVEL);
 
-static int mpr_init(struct device *dev)
+static int mpr_init(const struct device *dev)
 {
 	struct mpr_data *data = dev->data;
 	const struct mpr_config *cfg = dev->config;
@@ -34,7 +34,7 @@ static int mpr_init(struct device *dev)
 	return 0;
 }
 
-static int mpr_read_reg(struct device *dev)
+static int mpr_read_reg(const struct device *dev)
 {
 	struct mpr_data *data = dev->data;
 	const struct mpr_config *cfg = dev->config;
@@ -100,14 +100,15 @@ static inline void mpr_convert_reg(const uint32_t *reg, uint64_t *value)
 	}
 }
 
-static int mpr_sample_fetch(struct device *dev, enum sensor_channel chan)
+static int mpr_sample_fetch(const struct device *dev,
+			    enum sensor_channel chan)
 {
 	__ASSERT_NO_MSG(chan == SENSOR_CHAN_ALL || chan == SENSOR_CHAN_PRESS);
 
 	return mpr_read_reg(dev);
 }
 
-static int mpr_channel_get(struct device *dev,
+static int mpr_channel_get(const struct device *dev,
 			   enum sensor_channel chan,
 			   struct sensor_value *val)
 {
@@ -136,6 +137,6 @@ static const struct mpr_config mpr_cfg = {
 	.i2c_addr = DT_INST_REG_ADDR(0),
 };
 
-DEVICE_AND_API_INIT(mpr, DT_INST_LABEL(0), mpr_init, &mpr_data,
+DEVICE_DT_INST_DEFINE(0, mpr_init, NULL, &mpr_data,
 			&mpr_cfg, POST_KERNEL, CONFIG_SENSOR_INIT_PRIORITY,
 			&mpr_api_funcs);

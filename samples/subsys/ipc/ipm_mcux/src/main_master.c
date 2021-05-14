@@ -11,7 +11,7 @@
 
 int gcounter;
 
-void ping_ipm_callback(struct device *dev, void *context,
+void ping_ipm_callback(const struct device *dev, void *context,
 		       uint32_t id, volatile void *data)
 {
 	gcounter = *(int *)data;
@@ -30,13 +30,13 @@ void main(void)
 	int first_message = 1; /* do not start from 0,
 				* zero value can't be sent via mailbox register
 				*/
-	struct device *ipm;
+	const struct device *ipm;
 
 	printk("Hello World from MASTER! %s\n", CONFIG_ARCH);
 
 	/* Get IPM device handle */
-	ipm = device_get_binding(DT_LABEL(DT_INST(0, nxp_lpc_mailbox)));
-	if (!ipm) {
+	ipm = DEVICE_DT_GET_ANY(nxp_lpc_mailbox);
+	if (!(ipm && device_is_ready(ipm))) {
 		printk("Could not get IPM device handle!\n");
 		while (1) {
 		}

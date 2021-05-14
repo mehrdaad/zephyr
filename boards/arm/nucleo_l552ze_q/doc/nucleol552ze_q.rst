@@ -152,6 +152,10 @@ The Zephyr nucleo_l552ze_q board configuration supports the following hardware f
 +-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
 +-----------+------------+-------------------------------------+
+| TrustZone | on-chip    | Trusted Firmware-M                  |
++-----------+------------+-------------------------------------+
+| RNG       | on-chip    | True Random Number Generator        |
++-----------+------------+-------------------------------------+
 
 Other hardware features are not yet supported on this Zephyr port.
 
@@ -167,16 +171,16 @@ input/output, pull-up, etc.
 
 Available pins:
 ---------------
-.. image:: img/nucleo_l552ze_q_arduino.png
+.. image:: img/nucleo_l552ze_q_zio_left_2020_2_11.png
    :width: 720px
    :align: center
    :height: 540px
-   :alt: Nucleo L552ZE Q Arduino connectors
-.. image:: img/nucleo_l552ze_q_morpho.png
+   :alt: Nucleo L552ZE Q Zio left connector
+.. image:: img/nucleo_l552ze_q_zio_right_2020_2_11.png
    :width: 720px
    :align: center
    :height: 540px
-   :alt: Nucleo L552ZE Q Morpho connectors
+   :alt: Nucleo L552ZE Q Zio right connector
 
 For mode details please refer to `STM32 Nucleo-144 board User Manual`_.
 
@@ -238,6 +242,7 @@ the following pyocd command:
 
 .. code-block:: console
 
+   $ pyocd pack --update
    $ pyocd pack --install stm32l552ze
 
 Nucleo L552ZE Q board includes an ST-LINK/V2-1 embedded debug tool
@@ -269,6 +274,36 @@ You should see the following message on the console:
 .. code-block:: console
 
    Hello World! arm
+
+Building a secure/non-secure with Arm |reg| TrustZone |reg|
+-----------------------------------------------------------
+
+The TF-M integration sample :ref:`tfm_ipc` can be run on a ST Nucleo L552ZE Q.
+In TF-M configuration, Zephyr is run on the non-secure domain. A non-secure image
+can be generated using ``nucleo_l552ze_q_ns`` as build target.
+
+.. code-block:: bash
+
+   $ west build -b nucleo_l552ze_q_ns path/to/source/directory
+
+Note: When building the ``*_ns`` image with TF-M, ``build/tfm/postbuild.sh`` bash script
+is run automatically in a post-build step to make some required flash layout changes.
+
+Once the build is completed, run the following script to initialize the option bytes.
+
+.. code-block:: bash
+
+   $ build/tfm/regression.sh
+
+Finally, to flash the board, run:
+
+.. code-block:: bash
+
+   $ west flash --hex-file build/tfm_merged.hex
+
+Note: Check the ``build/tfm`` directory to ensure that the commands required by these scripts
+(``readlink``, etc.) are available on your system. Please also check ``STM32_Programmer_CLI``
+(which is used for initialization) is available in the PATH.
 
 Debugging
 =========

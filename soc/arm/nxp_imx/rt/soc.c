@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017,2018, NXP
+ * Copyright (c) 2017-2020 NXP
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -9,6 +9,7 @@
 #include <init.h>
 #include <soc.h>
 #include <linker/sections.h>
+#include <linker/linker-defs.h>
 #include <fsl_clock.h>
 #include <arch/cpu.h>
 #include <arch/arm/aarch32/cortex_m/cmsis.h>
@@ -49,7 +50,10 @@ const clock_usb_pll_config_t usb1PllConfig = {
 #ifdef CONFIG_INIT_ENET_PLL
 /* ENET PLL configuration for RUN mode */
 const clock_enet_pll_config_t ethPllConfig = {
-#if defined(CONFIG_SOC_MIMXRT1021) || defined(CONFIG_SOC_MIMXRT1015) || defined(CONFIG_SOC_MIMXRT1011)
+#if defined(CONFIG_SOC_MIMXRT1011) || \
+	defined(CONFIG_SOC_MIMXRT1015) || \
+	defined(CONFIG_SOC_MIMXRT1021) || \
+	defined(CONFIG_SOC_MIMXRT1024)
 	.enableClkOutput500M = true,
 #endif
 #ifdef CONFIG_ETH_MCUX
@@ -85,7 +89,7 @@ const __imx_boot_data_section BOOT_DATA_T boot_data = {
 
 const __imx_boot_ivt_section ivt image_vector_table = {
 	.hdr = IVT_HEADER,
-	.entry = CONFIG_FLASH_BASE_ADDRESS + CONFIG_ROM_START_OFFSET,
+	.entry = (uint32_t) _vector_start,
 	.reserved1 = IVT_RSVD,
 #ifdef CONFIG_DEVICE_CONFIGURATION_DATA
 	.dcd = (uint32_t) dcd_data,
@@ -187,25 +191,38 @@ static ALWAYS_INLINE void clock_init(void)
 	USB_EhciPhyInit(kUSB_ControllerEhci0, CPU_XTAL_CLK_HZ, &usbPhyConfig);
 #endif
 
-#if defined(CONFIG_DISK_ACCESS_USDHC1) ||       \
-	defined(CONFIG_DISK_ACCESS_USDHC2)
-	CLOCK_InitSysPfd(kCLOCK_Pfd0, 0x12U);
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usdhc1), okay) && CONFIG_DISK_DRIVER_SDMMC
 	/* Configure USDHC clock source and divider */
-#ifdef CONFIG_DISK_ACCESS_USDHC1
+	CLOCK_InitSysPfd(kCLOCK_Pfd0, 0x12U);
 	CLOCK_SetDiv(kCLOCK_Usdhc1Div, 0U);
 	CLOCK_SetMux(kCLOCK_Usdhc1Mux, 1U);
 	CLOCK_EnableClock(kCLOCK_Usdhc1);
 #endif
-#ifdef CONFIG_DISK_ACCESS_USDHC2
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(usdhc2), okay) && CONFIG_DISK_DRIVER_SDMMC
+	/* Configure USDHC clock source and divider */
+	CLOCK_InitSysPfd(kCLOCK_Pfd0, 0x12U);
 	CLOCK_SetDiv(kCLOCK_Usdhc2Div, 0U);
 	CLOCK_SetMux(kCLOCK_Usdhc2Mux, 1U);
 	CLOCK_EnableClock(kCLOCK_Usdhc2);
 #endif
-#endif
+
 #ifdef CONFIG_VIDEO_MCUX_CSI
 	CLOCK_EnableClock(kCLOCK_Csi); /* Disable CSI clock gate */
 	CLOCK_SetDiv(kCLOCK_CsiDiv, 0); /* Set CSI divider to 1 */
 	CLOCK_SetMux(kCLOCK_CsiMux, 0); /* Set CSI source to OSC 24M */
+#endif
+#ifdef CONFIG_CAN_MCUX_FLEXCAN
+	CLOCK_SetDiv(kCLOCK_CanDiv, 1); /* Set CAN_CLK_PODF. */
+	CLOCK_SetMux(kCLOCK_CanMux, 2); /* Set Can clock source. */
+#endif
+
+#if !(defined(CONFIG_CODE_FLEXSPI) || defined(CONFIG_CODE_FLEXSPI2)) && \
+	defined(CONFIG_MEMC_MCUX_FLEXSPI) && \
+	DT_NODE_HAS_STATUS(DT_NODELABEL(flexspi), okay)
+	CLOCK_DisableClock(kCLOCK_FlexSpi);
+	CLOCK_InitUsb1Pfd(kCLOCK_Pfd0, 24);
+	CLOCK_SetMux(kCLOCK_FlexspiMux, 3);
+	CLOCK_SetDiv(kCLOCK_FlexspiDiv, 2);
 #endif
 
 	/* Keep the system clock running so SYSTICK can wake up the system from
@@ -215,8 +232,7 @@ static ALWAYS_INLINE void clock_init(void)
 
 }
 
-#if defined(CONFIG_DISK_ACCESS_USDHC1) ||	\
-	defined(CONFIG_DISK_ACCESS_USDHC2)
+#if (DT_NODE_HAS_STATUS(DT_NODELABEL(usdhc1), okay) && CONFIG_DISK_DRIVER_SDMMC)
 
 /* Usdhc driver needs to re-configure pinmux
  * Pinmux depends on board design.
@@ -253,7 +269,7 @@ void imxrt_usdhc_pinmux(uint16_t nusdhc, bool init,
  * @return 0
  */
 
-static int imxrt_init(struct device *arg)
+static int imxrt_init(const struct device *arg)
 {
 	ARG_UNUSED(arg);
 

@@ -14,6 +14,7 @@
 #define ZEPHYR_INCLUDE_DRIVERS_ADC_H_
 
 #include <device.h>
+#include <dt-bindings/adc/adc.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,20 +75,6 @@ enum adc_reference {
 	ADC_REF_EXTERNAL0, /**< External, input 0. */
 	ADC_REF_EXTERNAL1, /**< External, input 1. */
 };
-
-/** Acquisition time is expressed in microseconds. */
-#define ADC_ACQ_TIME_MICROSECONDS  (1u)
-/** Acquisition time is expressed in nanoseconds. */
-#define ADC_ACQ_TIME_NANOSECONDS   (2u)
-/** Acquisition time is expressed in ADC ticks. */
-#define ADC_ACQ_TIME_TICKS         (3u)
-/** Macro for composing the acquisition time value in given units. */
-#define ADC_ACQ_TIME(unit, value)  (((unit) << 14) | ((value) & BIT_MASK(14)))
-/** Value indicating that the default acquisition time should be used. */
-#define ADC_ACQ_TIME_DEFAULT       0
-
-#define ADC_ACQ_TIME_UNIT(time)    (((time) >> 14) & BIT_MASK(2))
-#define ADC_ACQ_TIME_VALUE(time)   ((time) & BIT_MASK(14))
 
 /**
  * @brief Structure for specifying the configuration of an ADC channel.
@@ -218,16 +205,22 @@ enum adc_action {
  *
  * @param dev             Pointer to the device structure for the driver
  *                        instance.
- * @param sequence        Pointer to the sequence structure that triggered the
- *                        sampling.
+ * @param sequence        Pointer to the sequence structure that triggered
+ *                        the sampling. This parameter points to a copy of
+ *                        the structure that was supplied to the call that
+ *                        started the sampling sequence, thus it cannot be
+ *                        used with the CONTAINER_OF() macro to retrieve
+ *                        some other data associated with the sequence.
+ *                        Instead, the adc_sequence_options::user_data field
+ *                        should be used for such purpose.
+ *
  * @param sampling_index  Index (0-65535) of the sampling done.
  *
  * @returns Action to be performed by the driver. See @ref adc_action.
  */
-typedef enum adc_action (*adc_sequence_callback)(
-				struct device *dev,
-				const struct adc_sequence *sequence,
-				uint16_t sampling_index);
+typedef enum adc_action (*adc_sequence_callback)(const struct device *dev,
+						 const struct adc_sequence *sequence,
+						 uint16_t sampling_index);
 
 /**
  * @brief Structure defining additional options for an ADC sampling sequence.
@@ -249,6 +242,12 @@ struct adc_sequence_options {
 	 * Optional - set to NULL if it is not needed.
 	 */
 	adc_sequence_callback callback;
+
+	/**
+	 * Pointer to user data. It can be used to associate the sequence
+	 * with any other data that is needed in the callback function.
+	 */
+	void *user_data;
 
 	/**
 	 * Number of extra samplings to perform (the total number of samplings
@@ -327,26 +326,24 @@ struct adc_sequence {
  * @brief Type definition of ADC API function for configuring a channel.
  * See adc_channel_setup() for argument descriptions.
  */
-typedef int (*adc_api_channel_setup)(struct device *dev,
+typedef int (*adc_api_channel_setup)(const struct device *dev,
 				     const struct adc_channel_cfg *channel_cfg);
 
 /**
  * @brief Type definition of ADC API function for setting a read request.
  * See adc_read() for argument descriptions.
  */
-typedef int (*adc_api_read)(struct device *dev,
+typedef int (*adc_api_read)(const struct device *dev,
 			    const struct adc_sequence *sequence);
 
-#ifdef CONFIG_ADC_ASYNC
 /**
  * @brief Type definition of ADC API function for setting an asynchronous
  *        read request.
  * See adc_read_async() for argument descriptions.
  */
-typedef int (*adc_api_read_async)(struct device *dev,
+typedef int (*adc_api_read_async)(const struct device *dev,
 				  const struct adc_sequence *sequence,
 				  struct k_poll_signal *async);
-#endif
 
 /**
  * @brief ADC driver API
@@ -374,11 +371,11 @@ __subsystem struct adc_driver_api {
  * @retval 0       On success.
  * @retval -EINVAL If a parameter with an invalid value has been provided.
  */
-__syscall int adc_channel_setup(struct device *dev,
+__syscall int adc_channel_setup(const struct device *dev,
 				const struct adc_channel_cfg *channel_cfg);
 
-static inline int z_impl_adc_channel_setup(struct device *dev,
-				const struct adc_channel_cfg *channel_cfg)
+static inline int z_impl_adc_channel_setup(const struct device *dev,
+					   const struct adc_channel_cfg *channel_cfg)
 {
 	const struct adc_driver_api *api =
 				(const struct adc_driver_api *)dev->api;
@@ -407,10 +404,10 @@ static inline int z_impl_adc_channel_setup(struct device *dev,
  *                  in the buffer, but at least some of them were taken with
  *                  an extra delay compared to what was scheduled.
  */
-__syscall int adc_read(struct device *dev,
+__syscall int adc_read(const struct device *dev,
 		       const struct adc_sequence *sequence);
 
-static inline int z_impl_adc_read(struct device *dev,
+static inline int z_impl_adc_read(const struct device *dev,
 				  const struct adc_sequence *sequence)
 {
 	const struct adc_driver_api *api =
@@ -419,9 +416,11 @@ static inline int z_impl_adc_read(struct device *dev,
 	return api->read(dev, sequence);
 }
 
-#ifdef CONFIG_ADC_ASYNC
 /**
  * @brief Set an asynchronous read request.
+ *
+ * @note This function is available only if @option{CONFIG_ADC_ASYNC}
+ * is selected.
  *
  * If invoked from user mode, any sequence struct options for callback must
  * be NULL.
@@ -434,14 +433,16 @@ static inline int z_impl_adc_read(struct device *dev,
  *                  or not).
  *
  * @returns 0 on success, negative error code otherwise.
+ *          See adc_read() for a list of possible error codes.
  *
  */
-__syscall int adc_read_async(struct device *dev,
+__syscall int adc_read_async(const struct device *dev,
 			     const struct adc_sequence *sequence,
 			     struct k_poll_signal *async);
 
 
-static inline int z_impl_adc_read_async(struct device *dev,
+#ifdef CONFIG_ADC_ASYNC
+static inline int z_impl_adc_read_async(const struct device *dev,
 					const struct adc_sequence *sequence,
 					struct k_poll_signal *async)
 {
@@ -461,7 +462,7 @@ static inline int z_impl_adc_read_async(struct device *dev,
  * @return a positive value is the reference voltage value.  Returns
  * zero if reference voltage information is not available.
  */
-static inline uint16_t adc_ref_internal(struct device *dev)
+static inline uint16_t adc_ref_internal(const struct device *dev)
 {
 	const struct adc_driver_api *api =
 				(const struct adc_driver_api *)dev->api;

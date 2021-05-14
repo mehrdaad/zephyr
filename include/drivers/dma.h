@@ -42,6 +42,12 @@ enum dma_addr_adj {
 	DMA_ADDR_ADJ_NO_CHANGE,
 };
 
+/* channel attributes */
+enum dma_channel_filter {
+	DMA_CHANNEL_NORMAL, /* normal DMA channel */
+	DMA_CHANNEL_PERIODIC, /* can be triggerred by periodic sources */
+};
+
 /**
  * @brief DMA block configuration structure.
  *
@@ -113,7 +119,7 @@ struct dma_block_config {
  * @param channel The channel number
  * @param status 0 on success, a negative errno otherwise
  */
-typedef void (*dma_callback_t)(struct device *dev, void *user_data,
+typedef void (*dma_callback_t)(const struct device *dev, void *user_data,
 			       uint32_t channel, int status);
 
 /**
@@ -194,29 +200,63 @@ struct dma_status {
 };
 
 /**
+ * DMA context structure
+ * Note: the dma_context shall be the first member
+ *       of DMA client driver Data, got by dev->data
+ *
+ * magic			- magic code to identify the context
+ * dma_channels		- dma channels
+ * atomic			- driver atomic_t pointer
+ *
+ */
+struct dma_context {
+	int magic;
+	int dma_channels;
+	atomic_t *atomic;
+};
+
+/* magic code to identify context content */
+#define DMA_MAGIC 0x47494749
+
+/**
  * @cond INTERNAL_HIDDEN
  *
  * These are for internal use only, so skip these in
  * public documentation.
  */
-
-typedef int (*dma_api_config)(struct device *dev, uint32_t channel,
+typedef int (*dma_api_config)(const struct device *dev, uint32_t channel,
 			      struct dma_config *config);
 
 #ifdef CONFIG_DMA_64BIT
-typedef int (*dma_api_reload)(struct device *dev, uint32_t channel,
-		uint64_t src, uint64_t dst, size_t size);
+typedef int (*dma_api_reload)(const struct device *dev, uint32_t channel,
+			      uint64_t src, uint64_t dst, size_t size);
 #else
-typedef int (*dma_api_reload)(struct device *dev, uint32_t channel,
-		uint32_t src, uint32_t dst, size_t size);
+typedef int (*dma_api_reload)(const struct device *dev, uint32_t channel,
+			      uint32_t src, uint32_t dst, size_t size);
 #endif
 
-typedef int (*dma_api_start)(struct device *dev, uint32_t channel);
+typedef int (*dma_api_start)(const struct device *dev, uint32_t channel);
 
-typedef int (*dma_api_stop)(struct device *dev, uint32_t channel);
+typedef int (*dma_api_stop)(const struct device *dev, uint32_t channel);
 
-typedef int (*dma_api_get_status)(struct device *dev, uint32_t channel,
+typedef int (*dma_api_get_status)(const struct device *dev, uint32_t channel,
 				  struct dma_status *status);
+
+/**
+ * @typedef dma_chan_filter
+ * @brief channel filter function call
+ *
+ * filter function that is used to find the matched internal dma channel
+ * provide by caller
+ *
+ * @param dev Pointer to the DMA device instance
+ * @param channel the channel id to use
+ * @param filter_param filter function parameter, can be NULL
+ *
+ * @retval True on filter matched otherwise return False.
+ */
+typedef bool (*dma_api_chan_filter)(const struct device *dev,
+				int channel, void *filter_param);
 
 __subsystem struct dma_driver_api {
 	dma_api_config config;
@@ -224,6 +264,7 @@ __subsystem struct dma_driver_api {
 	dma_api_start start;
 	dma_api_stop stop;
 	dma_api_get_status get_status;
+	dma_api_chan_filter chan_filter;
 };
 /**
  * @endcond
@@ -240,7 +281,7 @@ __subsystem struct dma_driver_api {
  * @retval 0 if successful.
  * @retval Negative errno code if failure.
  */
-static inline int dma_config(struct device *dev, uint32_t channel,
+static inline int dma_config(const struct device *dev, uint32_t channel,
 			     struct dma_config *config)
 {
 	const struct dma_driver_api *api =
@@ -263,10 +304,10 @@ static inline int dma_config(struct device *dev, uint32_t channel,
  * @retval Negative errno code if failure.
  */
 #ifdef CONFIG_DMA_64BIT
-static inline int dma_reload(struct device *dev, uint32_t channel,
-		uint64_t src, uint64_t dst, size_t size)
+static inline int dma_reload(const struct device *dev, uint32_t channel,
+			     uint64_t src, uint64_t dst, size_t size)
 #else
-static inline int dma_reload(struct device *dev, uint32_t channel,
+static inline int dma_reload(const struct device *dev, uint32_t channel,
 		uint32_t src, uint32_t dst, size_t size)
 #endif
 {
@@ -294,9 +335,9 @@ static inline int dma_reload(struct device *dev, uint32_t channel,
  * @retval 0 if successful.
  * @retval Negative errno code if failure.
  */
-__syscall int dma_start(struct device *dev, uint32_t channel);
+__syscall int dma_start(const struct device *dev, uint32_t channel);
 
-static inline int z_impl_dma_start(struct device *dev, uint32_t channel)
+static inline int z_impl_dma_start(const struct device *dev, uint32_t channel)
 {
 	const struct dma_driver_api *api =
 		(const struct dma_driver_api *)dev->api;
@@ -317,14 +358,113 @@ static inline int z_impl_dma_start(struct device *dev, uint32_t channel)
  * @retval 0 if successful.
  * @retval Negative errno code if failure.
  */
-__syscall int dma_stop(struct device *dev, uint32_t channel);
+__syscall int dma_stop(const struct device *dev, uint32_t channel);
 
-static inline int z_impl_dma_stop(struct device *dev, uint32_t channel)
+static inline int z_impl_dma_stop(const struct device *dev, uint32_t channel)
 {
 	const struct dma_driver_api *api =
 		(const struct dma_driver_api *)dev->api;
 
 	return api->stop(dev, channel);
+}
+
+/**
+ * @brief request DMA channel.
+ *
+ * request DMA channel resources
+ * return -EINVAL if there is no valid channel available.
+ *
+ * @param dev Pointer to the device structure for the driver instance.
+ * @param filter_param filter function parameter
+ *
+ * @retval dma channel if successful.
+ * @retval Negative errno code if failure.
+ */
+__syscall int dma_request_channel(const struct device *dev,
+				  void *filter_param);
+
+static inline int z_impl_dma_request_channel(const struct device *dev,
+					     void *filter_param)
+{
+	int i = 0;
+	int channel = -EINVAL;
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->api;
+	/* dma_context shall be the first one in dev data */
+	struct dma_context *dma_ctx = (struct dma_context *)dev->data;
+
+	if (dma_ctx->magic != DMA_MAGIC) {
+		return channel;
+	}
+
+	for (i = 0; i < dma_ctx->dma_channels; i++) {
+		if (!atomic_test_and_set_bit(dma_ctx->atomic, i)) {
+			channel = i;
+			if (api->chan_filter &&
+			    !api->chan_filter(dev, channel, filter_param)) {
+				atomic_clear_bit(dma_ctx->atomic, channel);
+				continue;
+			}
+			break;
+		}
+	}
+
+	return channel;
+}
+
+/**
+ * @brief release DMA channel.
+ *
+ * release DMA channel resources
+ *
+ * @param dev  Pointer to the device structure for the driver instance.
+ * @param channel  channel number
+ *
+ */
+__syscall void dma_release_channel(const struct device *dev,
+				   uint32_t channel);
+
+static inline void z_impl_dma_release_channel(const struct device *dev,
+					      uint32_t channel)
+{
+	struct dma_context *dma_ctx = (struct dma_context *)dev->data;
+
+	if (dma_ctx->magic != DMA_MAGIC) {
+		return;
+	}
+
+	if (channel < dma_ctx->dma_channels) {
+		atomic_clear_bit(dma_ctx->atomic, channel);
+	}
+
+}
+
+/**
+ * @brief DMA channel filter.
+ *
+ * filter channel by attribute
+ *
+ * @param dev  Pointer to the device structure for the driver instance.
+ * @param channel  channel number
+ * @param filter_param filter attribute
+ *
+ * @retval Negative errno code if not support
+ *
+ */
+__syscall int dma_chan_filter(const struct device *dev,
+				   int channel, void *filter_param);
+
+static inline int z_impl_dma_chan_filter(const struct device *dev,
+					      int channel, void *filter_param)
+{
+	const struct dma_driver_api *api =
+		(const struct dma_driver_api *)dev->api;
+
+	if (api->chan_filter) {
+		return api->chan_filter(dev, channel, filter_param);
+	}
+
+	return -ENOSYS;
 }
 
 /**
@@ -341,7 +481,7 @@ static inline int z_impl_dma_stop(struct device *dev, uint32_t channel)
  * @retval non-negative if successful.
  * @retval Negative errno code if failure.
  */
-static inline int dma_get_status(struct device *dev, uint32_t channel,
+static inline int dma_get_status(const struct device *dev, uint32_t channel,
 				 struct dma_status *stat)
 {
 	const struct dma_driver_api *api =

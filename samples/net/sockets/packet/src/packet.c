@@ -15,7 +15,11 @@ LOG_MODULE_REGISTER(net_pkt_sock_sample, LOG_LEVEL_DBG);
 #include <net/ethernet.h>
 
 #define STACK_SIZE 1024
-#define THREAD_PRIORITY K_PRIO_COOP(8)
+#if IS_ENABLED(CONFIG_NET_TC_THREAD_COOPERATIVE)
+#define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
+#else
+#define THREAD_PRIORITY K_PRIO_PREEMPT(8)
+#endif
 #define RECV_BUFFER_SIZE 1280
 #define WAIT_TIME CONFIG_NET_SAMPLE_SEND_WAIT_TIME
 
@@ -73,12 +77,18 @@ static void quit(void)
 
 static int start_socket(int *sock)
 {
-	struct sockaddr_ll dst;
+	struct sockaddr_ll dst = { 0 };
 	int ret;
 
-	*sock = socket(AF_PACKET, SOCK_RAW, ETH_P_ALL);
+	*sock = socket(AF_PACKET,
+		       IS_ENABLED(CONFIG_NET_SAMPLE_ENABLE_PACKET_DGRAM) ?
+							SOCK_DGRAM : SOCK_RAW,
+		       ETH_P_ALL);
 	if (*sock < 0) {
-		LOG_ERR("Failed to create RAW socket : %d", errno);
+		LOG_ERR("Failed to create %s socket : %d",
+			IS_ENABLED(CONFIG_NET_SAMPLE_ENABLE_PACKET_DGRAM) ?
+							"DGRAM" : "RAW",
+			errno);
 		return -errno;
 	}
 
@@ -140,11 +150,27 @@ static void recv_packet(void)
 
 static int send_packet_socket(struct packet_data *packet)
 {
-	struct sockaddr_ll dst;
+	struct sockaddr_ll dst = { 0 };
 	size_t send = 100U;
 	int ret;
 
 	dst.sll_ifindex = net_if_get_by_iface(net_if_get_default());
+
+	if (IS_ENABLED(CONFIG_NET_SAMPLE_ENABLE_PACKET_DGRAM)) {
+		dst.sll_halen = sizeof(struct net_eth_addr);
+
+		/* FIXME: assume IP data atm */
+		dst.sll_protocol = htons(ETH_P_IP);
+
+		ret = net_bytes_from_str(
+			dst.sll_addr,
+			dst.sll_halen,
+			CONFIG_NET_SAMPLE_DESTINATION_ADDR);
+		if (ret < 0) {
+			LOG_ERR("Invalid MAC address '%s'",
+				CONFIG_NET_SAMPLE_DESTINATION_ADDR);
+		}
+	}
 
 	do {
 		/* Sending dummy data */
@@ -159,6 +185,16 @@ static int send_packet_socket(struct packet_data *packet)
 				LOG_DBG("Sent %zd bytes", send);
 			}
 		}
+
+		/* If we have received any data, flush it here in order to
+		 * not to leak memory in IP stack.
+		 */
+		do {
+			static char recv_buffer[RECV_BUFFER_SIZE];
+
+			ret = recv(packet->send_sock, recv_buffer,
+				   sizeof(recv_buffer), MSG_DONTWAIT);
+		} while (ret > 0);
 
 		if (!FLOOD) {
 			k_msleep(WAIT_TIME);
@@ -189,7 +225,7 @@ static void send_packet(void)
 
 void main(void)
 {
-	k_sem_init(&quit_lock, 0, UINT_MAX);
+	k_sem_init(&quit_lock, 0, K_SEM_MAX_LIMIT);
 
 	LOG_INF("Packet socket sample is running");
 

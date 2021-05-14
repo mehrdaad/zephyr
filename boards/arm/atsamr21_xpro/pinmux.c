@@ -9,11 +9,15 @@
 #include <drivers/pinmux.h>
 #include <soc.h>
 
-static int board_pinmux_init(struct device *dev)
+static int board_pinmux_init(const struct device *dev)
 {
-	struct device *muxa = device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_a)));
-	struct device *muxb = device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_b)));
-	struct device *muxc = device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_c)));
+	const struct device *muxa = DEVICE_DT_GET(DT_NODELABEL(pinmux_a));
+	const struct device *muxb = DEVICE_DT_GET(DT_NODELABEL(pinmux_b));
+	const struct device *muxc = DEVICE_DT_GET(DT_NODELABEL(pinmux_c));
+
+	__ASSERT_NO_MSG(device_is_ready(muxa));
+	__ASSERT_NO_MSG(device_is_ready(muxb));
+	__ASSERT_NO_MSG(device_is_ready(muxc));
 
 	ARG_UNUSED(dev);
 

@@ -8,16 +8,15 @@
 #include <drivers/pinmux.h>
 #include <soc.h>
 
-static int board_pinmux_init(struct device *dev)
+static int board_pinmux_init(const struct device *dev)
 {
-	struct device *muxa =
-		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_a)));
-	struct device *muxb =
-		device_get_binding(DT_LABEL(DT_NODELABEL(pinmux_b)));
+	__unused const struct device *muxa = DEVICE_DT_GET(DT_NODELABEL(pinmux_a));
+	__unused const struct device *muxb = DEVICE_DT_GET(DT_NODELABEL(pinmux_b));
+
+	__ASSERT_NO_MSG(device_is_ready(muxa));
+	__ASSERT_NO_MSG(device_is_ready(muxb));
 
 	ARG_UNUSED(dev);
-	(void)muxa;
-	(void)muxb;
 
 #if ATMEL_SAM0_DT_SERCOM_CHECK(3, atmel_sam0_uart) && defined(CONFIG_UART_SAM0)
 	/* SERCOM3 on RX=PA16/pad 1, TX=PA17/pad 0 */

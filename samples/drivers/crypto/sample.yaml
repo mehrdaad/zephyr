@@ -6,6 +6,8 @@ common:
   tags: crypto
   min_ram: 20
   arch_exclude: xtensa
+  integration_platforms:
+    - native_posix
 tests:
   sample.drivers.crypto.mbedtls:
     min_flash: 34
@@ -32,6 +34,6 @@ tests:
         - ".*: GCM Mode"
   sample.drivers.crypto.stm32:
     tags: crypto
-    platform_whitelist: mikroe_mini_m4_for_stm32
+    platform_allow: mikroe_mini_m4_for_stm32
     build_only: true
     extra_args: CONF_FILE=prj_stm32.conf

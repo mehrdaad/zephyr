@@ -25,9 +25,11 @@ extern "C" {
  * @brief A function that is called when the USB host changes the baud
  * rate.
  *
- * @param port Device struct for the CDC ACM device.
+ * @param dev Device struct for the CDC ACM device.
+ * @param rate New USB baud rate
  */
-typedef void (*cdc_dte_rate_callback_t)(struct device *dev, uint32_t rate);
+typedef void (*cdc_dte_rate_callback_t)(const struct device *dev,
+					uint32_t rate);
 
 /**
  * @brief Set the callback for dwDTERate SetLineCoding requests.
@@ -42,7 +44,7 @@ typedef void (*cdc_dte_rate_callback_t)(struct device *dev, uint32_t rate);
  *
  * @return	    0 on success.
  */
-int cdc_acm_dte_rate_callback_set(struct device *dev,
+int cdc_acm_dte_rate_callback_set(const struct device *dev,
 				  cdc_dte_rate_callback_t callback);
 
 #ifdef __cplusplus

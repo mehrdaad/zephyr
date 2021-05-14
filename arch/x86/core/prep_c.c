@@ -8,6 +8,7 @@
 #include <kernel_internal.h>
 #include <arch/x86/acpi.h>
 #include <arch/x86/multiboot.h>
+#include <x86_mmu.h>
 
 extern FUNC_NORETURN void z_cstart(void);
 extern void x86_64_irq_init(void);
@@ -15,11 +16,20 @@ extern void x86_64_irq_init(void);
 /* Early global initialization functions, C domain. This runs only on the first
  * CPU for SMP systems.
  */
+__boot_func
 FUNC_NORETURN void z_x86_prep_c(void *arg)
 {
 	struct multiboot_info *info = arg;
 
 	_kernel.cpus[0].nested = 0;
+
+#ifdef CONFIG_MMU
+	z_x86_mmu_init();
+#endif
+
+#if defined(CONFIG_LOAPIC)
+	z_loapic_enable(0);
+#endif
 
 #ifdef CONFIG_X86_VERY_EARLY_CONSOLE
 	z_x86_early_serial_init();
@@ -33,10 +43,6 @@ FUNC_NORETURN void z_x86_prep_c(void *arg)
 	z_multiboot_init(info);
 #else
 	ARG_UNUSED(info);
-#endif
-
-#ifdef CONFIG_X86_MMU
-	z_x86_paging_init();
 #endif
 
 #if CONFIG_X86_STACK_PROTECTION

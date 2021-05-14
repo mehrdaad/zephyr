@@ -195,12 +195,13 @@ typedef void (*usb_audio_data_completion_cb_t)(const struct device *dev,
  *
  * @warning Host may not use all of configured features.
  *
+ * @param dev USB Audio device
  * @param evt Pointer to an event to be parsed by the App.
  *	      Pointer sturct is temporary and is valid only during the
  *	      execution of this callback.
  */
-typedef void (*usb_audio_feature_updated_cb_t)(struct device *dev,
-				const struct usb_audio_fu_evt *evt);
+typedef void (*usb_audio_feature_updated_cb_t)(const struct device *dev,
+					       const struct usb_audio_fu_evt *evt);
 
 /**
  * @brief Audio callbacks used to interact with audio devices by user App.
@@ -257,7 +258,7 @@ size_t usb_audio_get_in_frame_size(const struct device *dev);
  * @param ops USB audio callback structure. Callback are used to
  *	      inform the user about what is happening
  */
-void usb_audio_register(struct device *dev,
+void usb_audio_register(const struct device *dev,
 			const struct usb_audio_ops *ops);
 
 /**

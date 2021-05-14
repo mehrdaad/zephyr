@@ -31,9 +31,8 @@ struct dma_sam0_data {
 
 
 /* Handles DMA interrupts and dispatches to the individual channel */
-static void dma_sam0_isr(void *arg)
+static void dma_sam0_isr(const struct device *dev)
 {
-	struct device *dev = arg;
 	struct dma_sam0_data *data = DEV_DATA(dev);
 	struct dma_sam0_channel *chdata;
 	uint16_t pend = DMA_REGS->INTPEND.reg;
@@ -63,7 +62,7 @@ static void dma_sam0_isr(void *arg)
 }
 
 /* Configure a channel */
-static int dma_sam0_config(struct device *dev, uint32_t channel,
+static int dma_sam0_config(const struct device *dev, uint32_t channel,
 			   struct dma_config *config)
 {
 	struct dma_sam0_data *data = DEV_DATA(dev);
@@ -265,7 +264,7 @@ inval:
 	return -EINVAL;
 }
 
-static int dma_sam0_start(struct device *dev, uint32_t channel)
+static int dma_sam0_start(const struct device *dev, uint32_t channel)
 {
 	int key = irq_lock();
 
@@ -296,7 +295,7 @@ static int dma_sam0_start(struct device *dev, uint32_t channel)
 	return 0;
 }
 
-static int dma_sam0_stop(struct device *dev, uint32_t channel)
+static int dma_sam0_stop(const struct device *dev, uint32_t channel)
 {
 	int key = irq_lock();
 
@@ -316,7 +315,7 @@ static int dma_sam0_stop(struct device *dev, uint32_t channel)
 	return 0;
 }
 
-static int dma_sam0_reload(struct device *dev, uint32_t channel,
+static int dma_sam0_reload(const struct device *dev, uint32_t channel,
 			   uint32_t src, uint32_t dst, size_t size)
 {
 	struct dma_sam0_data *data = DEV_DATA(dev);
@@ -360,7 +359,7 @@ inval:
 	return -EINVAL;
 }
 
-static int dma_sam0_get_status(struct device *dev, uint32_t channel,
+static int dma_sam0_get_status(const struct device *dev, uint32_t channel,
 			       struct dma_status *stat)
 {
 	struct dma_sam0_data *data = DEV_DATA(dev);
@@ -397,17 +396,15 @@ static int dma_sam0_get_status(struct device *dev, uint32_t channel,
 	return 0;
 }
 
-DEVICE_DECLARE(dma_sam0_0);
-
 #define DMA_SAM0_IRQ_CONNECT(n)						 \
 	do {								 \
 		IRQ_CONNECT(DT_INST_IRQ_BY_IDX(0, n, irq),		 \
 			    DT_INST_IRQ_BY_IDX(0, n, priority),		 \
-			    dma_sam0_isr, DEVICE_GET(dma_sam0_0), 0);	 \
+			    dma_sam0_isr, DEVICE_DT_INST_GET(0), 0);	 \
 		irq_enable(DT_INST_IRQ_BY_IDX(0, n, irq));		 \
 	} while (0)
 
-static int dma_sam0_init(struct device *dev)
+static int dma_sam0_init(const struct device *dev)
 {
 	struct dma_sam0_data *data = DEV_DATA(dev);
 
@@ -460,6 +457,6 @@ static const struct dma_driver_api dma_sam0_api = {
 	.get_status = dma_sam0_get_status,
 };
 
-DEVICE_AND_API_INIT(dma_sam0_0, DT_INST_LABEL(0), &dma_sam0_init,
+DEVICE_DT_INST_DEFINE(0, &dma_sam0_init, NULL,
 		    &dmac_data, NULL, POST_KERNEL,
 		    CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &dma_sam0_api);

@@ -34,9 +34,8 @@ K_APPMEM_PARTITION_DEFINE(z_libc_partition);
 K_APPMEM_PARTITION_DEFINE(k_mbedtls_partition);
 #endif
 
-#define LOG_LEVEL CONFIG_KERNEL_LOG_LEVEL
 #include <logging/log.h>
-LOG_MODULE_DECLARE(os);
+LOG_MODULE_DECLARE(os, CONFIG_KERNEL_LOG_LEVEL);
 
 /* The originally synchronization strategy made heavy use of recursive
  * irq_locking, which ports poorly to spinlocks which are
@@ -111,14 +110,38 @@ uint8_t *z_priv_stack_find(k_thread_stack_t *stack)
 #endif /* CONFIG_GEN_PRIV_STACKS */
 
 #ifdef CONFIG_DYNAMIC_OBJECTS
+
+/*
+ * Note that dyn_obj->data is where the kernel object resides
+ * so it is the one that actually needs to be aligned.
+ * Due to the need to get the the fields inside struct dyn_obj
+ * from kernel object pointers (i.e. from data[]), the offset
+ * from data[] needs to be fixed at build time. Therefore,
+ * data[] is declared with __aligned(), such that when dyn_obj
+ * is allocated with alignment, data[] is also aligned.
+ * Due to this requirement, data[] needs to be aligned with
+ * the maximum alignment needed for all kernel objects
+ * (hence the following DYN_OBJ_DATA_ALIGN).
+ */
+#ifdef ARCH_DYMANIC_OBJ_K_THREAD_ALIGNMENT
+#define DYN_OBJ_DATA_ALIGN_K_THREAD	(ARCH_DYMANIC_OBJ_K_THREAD_ALIGNMENT)
+#else
+#define DYN_OBJ_DATA_ALIGN_K_THREAD	(sizeof(void *))
+#endif
+
+#define DYN_OBJ_DATA_ALIGN		\
+	MAX(DYN_OBJ_DATA_ALIGN_K_THREAD, (sizeof(void *)))
+
 struct dyn_obj {
 	struct z_object kobj;
-	sys_dnode_t obj_list;
+	sys_dnode_t dobj_list;
 	struct rbnode node; /* must be immediately before data member */
-	uint8_t data[]; /* The object itself */
+
+	/* The object itself */
+	uint8_t data[] __aligned(DYN_OBJ_DATA_ALIGN_K_THREAD);
 };
 
-extern struct z_object *z_object_gperf_find(void *obj);
+extern struct z_object *z_object_gperf_find(const void *obj);
 extern void z_object_gperf_wordlist_foreach(_wordlist_cb_func_t func,
 					     void *context);
 
@@ -150,7 +173,27 @@ static size_t obj_size_get(enum k_objects otype)
 	switch (otype) {
 #include <otype-to-size.h>
 	default:
-		ret = sizeof(struct device);
+		ret = sizeof(const struct device);
+		break;
+	}
+
+	return ret;
+}
+
+static size_t obj_align_get(enum k_objects otype)
+{
+	size_t ret;
+
+	switch (otype) {
+	case K_OBJ_THREAD:
+#ifdef ARCH_DYMANIC_OBJ_K_THREAD_ALIGNMENT
+		ret = ARCH_DYMANIC_OBJ_K_THREAD_ALIGNMENT;
+#else
+		ret = sizeof(void *);
+#endif
+		break;
+	default:
+		ret = sizeof(void *);
 		break;
 	}
 
@@ -167,6 +210,13 @@ static inline struct dyn_obj *node_to_dyn_obj(struct rbnode *node)
 	return CONTAINER_OF(node, struct dyn_obj, node);
 }
 
+static inline struct rbnode *dyn_obj_to_node(void *obj)
+{
+	struct dyn_obj *dobj = CONTAINER_OF(obj, struct dyn_obj, data);
+
+	return &dobj->node;
+}
+
 static struct dyn_obj *dyn_object_find(void *obj)
 {
 	struct rbnode *node;
@@ -177,7 +227,7 @@ static struct dyn_obj *dyn_object_find(void *obj)
 	 * so just a little arithmetic is necessary to locate the
 	 * corresponding struct rbnode
 	 */
-	node = (struct rbnode *)((char *)obj - sizeof(struct rbnode));
+	node = dyn_obj_to_node(obj);
 
 	k_spinlock_key_t key = k_spin_lock(&lists_lock);
 	if (rb_contains(&obj_rb_tree, node)) {
@@ -253,28 +303,28 @@ static void thread_idx_free(uintptr_t tidx)
 	sys_bitfield_set_bit((mem_addr_t)_thread_idx_map, tidx);
 }
 
-struct z_object *z_dynamic_object_create(size_t size)
+struct z_object *z_dynamic_object_aligned_create(size_t align, size_t size)
 {
-	struct dyn_obj *dyn_obj;
+	struct dyn_obj *dyn;
 
-	dyn_obj = z_thread_malloc(sizeof(*dyn_obj) + size);
-	if (dyn_obj == NULL) {
+	dyn = z_thread_aligned_alloc(align, sizeof(*dyn) + size);
+	if (dyn == NULL) {
 		LOG_ERR("could not allocate kernel object, out of memory");
 		return NULL;
 	}
 
-	dyn_obj->kobj.name = &dyn_obj->data;
-	dyn_obj->kobj.type = K_OBJ_ANY;
-	dyn_obj->kobj.flags = 0;
-	(void)memset(dyn_obj->kobj.perms, 0, CONFIG_MAX_THREAD_BYTES);
+	dyn->kobj.name = &dyn->data;
+	dyn->kobj.type = K_OBJ_ANY;
+	dyn->kobj.flags = 0;
+	(void)memset(dyn->kobj.perms, 0, CONFIG_MAX_THREAD_BYTES);
 
 	k_spinlock_key_t key = k_spin_lock(&lists_lock);
 
-	rb_insert(&obj_rb_tree, &dyn_obj->node);
-	sys_dlist_append(&obj_list, &dyn_obj->obj_list);
+	rb_insert(&obj_rb_tree, &dyn->node);
+	sys_dlist_append(&obj_list, &dyn->dobj_list);
 	k_spin_unlock(&lists_lock, key);
 
-	return &dyn_obj->kobj;
+	return &dyn->kobj;
 }
 
 void *z_impl_k_object_alloc(enum k_objects otype)
@@ -307,7 +357,8 @@ void *z_impl_k_object_alloc(enum k_objects otype)
 		break;
 	}
 
-	zo = z_dynamic_object_create(obj_size_get(otype));
+	zo = z_dynamic_object_aligned_create(obj_align_get(otype),
+					     obj_size_get(otype));
 	if (zo == NULL) {
 		return NULL;
 	}
@@ -332,7 +383,7 @@ void *z_impl_k_object_alloc(enum k_objects otype)
 
 void k_object_free(void *obj)
 {
-	struct dyn_obj *dyn_obj;
+	struct dyn_obj *dyn;
 
 	/* This function is intentionally not exposed to user mode.
 	 * There's currently no robust way to track that an object isn't
@@ -341,23 +392,23 @@ void k_object_free(void *obj)
 
 	k_spinlock_key_t key = k_spin_lock(&objfree_lock);
 
-	dyn_obj = dyn_object_find(obj);
-	if (dyn_obj != NULL) {
-		rb_remove(&obj_rb_tree, &dyn_obj->node);
-		sys_dlist_remove(&dyn_obj->obj_list);
+	dyn = dyn_object_find(obj);
+	if (dyn != NULL) {
+		rb_remove(&obj_rb_tree, &dyn->node);
+		sys_dlist_remove(&dyn->dobj_list);
 
-		if (dyn_obj->kobj.type == K_OBJ_THREAD) {
-			thread_idx_free(dyn_obj->kobj.data.thread_id);
+		if (dyn->kobj.type == K_OBJ_THREAD) {
+			thread_idx_free(dyn->kobj.data.thread_id);
 		}
 	}
 	k_spin_unlock(&objfree_lock, key);
 
-	if (dyn_obj != NULL) {
-		k_free(dyn_obj);
+	if (dyn != NULL) {
+		k_free(dyn);
 	}
 }
 
-struct z_object *z_object_find(void *obj)
+struct z_object *z_object_find(const void *obj)
 {
 	struct z_object *ret;
 
@@ -366,7 +417,11 @@ struct z_object *z_object_find(void *obj)
 	if (ret == NULL) {
 		struct dyn_obj *dynamic_obj;
 
-		dynamic_obj = dyn_object_find(obj);
+		/* The cast to pointer-to-non-const violates MISRA
+		 * 11.8 but is justified since we know dynamic objects
+		 * were not declared with a const qualifier.
+		 */
+		dynamic_obj = dyn_object_find((void *)obj);
 		if (dynamic_obj != NULL) {
 			ret = &dynamic_obj->kobj;
 		}
@@ -383,7 +438,7 @@ void z_object_wordlist_foreach(_wordlist_cb_func_t func, void *context)
 
 	k_spinlock_key_t key = k_spin_lock(&lists_lock);
 
-	SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&obj_list, obj, next, obj_list) {
+	SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&obj_list, obj, next, dobj_list) {
 		func(&obj->kobj, context);
 	}
 	k_spin_unlock(&lists_lock, key);
@@ -410,7 +465,7 @@ static void unref_check(struct z_object *ko, uintptr_t index)
 	sys_bitfield_clear_bit((mem_addr_t)&ko->perms, index);
 
 #ifdef CONFIG_DYNAMIC_OBJECTS
-	struct dyn_obj *dyn_obj =
+	struct dyn_obj *dyn =
 			CONTAINER_OF(ko, struct dyn_obj, kobj);
 
 	if ((ko->flags & K_OBJ_FLAG_ALLOC) == 0U) {
@@ -443,9 +498,9 @@ static void unref_check(struct z_object *ko, uintptr_t index)
 		break;
 	}
 
-	rb_remove(&obj_rb_tree, &dyn_obj->node);
-	sys_dlist_remove(&dyn_obj->obj_list);
-	k_free(dyn_obj);
+	rb_remove(&obj_rb_tree, &dyn->node);
+	sys_dlist_remove(&dyn->dobj_list);
+	k_free(dyn);
 out:
 #endif
 	k_spin_unlock(&obj_lock, key);
@@ -504,7 +559,7 @@ void z_thread_perms_all_clear(struct k_thread *thread)
 {
 	uintptr_t index = thread_index_get(thread);
 
-	if (index != -1) {
+	if ((int)index != -1) {
 		z_object_wordlist_foreach(clear_perms_cb, (void *)index);
 	}
 }
@@ -533,7 +588,7 @@ static void dump_permission_error(struct z_object *ko)
 	LOG_HEXDUMP_ERR(ko->perms, sizeof(ko->perms), "permission bitmap");
 }
 
-void z_dump_object_error(int retval, void *obj, struct z_object *ko,
+void z_dump_object_error(int retval, const void *obj, struct z_object *ko,
 			enum k_objects otype)
 {
 	switch (retval) {
@@ -561,7 +616,7 @@ void z_dump_object_error(int retval, void *obj, struct z_object *ko,
 	}
 }
 
-void z_impl_k_object_access_grant(void *object, struct k_thread *thread)
+void z_impl_k_object_access_grant(const void *object, struct k_thread *thread)
 {
 	struct z_object *ko = z_object_find(object);
 
@@ -570,7 +625,7 @@ void z_impl_k_object_access_grant(void *object, struct k_thread *thread)
 	}
 }
 
-void k_object_access_revoke(void *object, struct k_thread *thread)
+void k_object_access_revoke(const void *object, struct k_thread *thread)
 {
 	struct z_object *ko = z_object_find(object);
 
@@ -579,12 +634,12 @@ void k_object_access_revoke(void *object, struct k_thread *thread)
 	}
 }
 
-void z_impl_k_object_release(void *object)
+void z_impl_k_object_release(const void *object)
 {
 	k_object_access_revoke(object, _current);
 }
 
-void k_object_access_all_grant(void *object)
+void k_object_access_all_grant(const void *object)
 {
 	struct z_object *ko = z_object_find(object);
 
@@ -626,7 +681,7 @@ int z_object_validate(struct z_object *ko, enum k_objects otype,
 	return 0;
 }
 
-void z_object_init(void *obj)
+void z_object_init(const void *obj)
 {
 	struct z_object *ko;
 
@@ -651,7 +706,7 @@ void z_object_init(void *obj)
 	ko->flags |= K_OBJ_FLAG_INITIALIZED;
 }
 
-void z_object_recycle(void *obj)
+void z_object_recycle(const void *obj)
 {
 	struct z_object *ko = z_object_find(obj);
 
@@ -662,7 +717,7 @@ void z_object_recycle(void *obj)
 	}
 }
 
-void z_object_uninit(void *obj)
+void z_object_uninit(const void *obj)
 {
 	struct z_object *ko;
 
@@ -751,7 +806,7 @@ char *z_user_string_alloc_copy(const char *src, size_t maxlen)
 	 * properly.
 	 */
 	if (ret != NULL) {
-		ret[actual_len - 1] = '\0';
+		ret[actual_len - 1U] = '\0';
 	}
 out:
 	return ret;
@@ -794,7 +849,7 @@ out:
 extern char __app_shmem_regions_start[];
 extern char __app_shmem_regions_end[];
 
-static int app_shmem_bss_zero(struct device *unused)
+static int app_shmem_bss_zero(const struct device *unused)
 {
 	struct z_app_region *region, *end;
 
